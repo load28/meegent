@@ -1,7 +1,7 @@
 interface TextBlock { type: "text"; text: string; }
 interface ToolCallBlock { type: "toolCall"; name: string; input?: { path?: string } }
 type Block = TextBlock | ToolCallBlock | { type: string };
-interface Msg { role: string; content?: Block[] | string; }
+export interface Msg { role: string; content?: Block[] | string; }
 
 function textOf(content: Msg["content"]): string {
   if (typeof content === "string") return content;
