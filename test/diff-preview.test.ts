@@ -13,6 +13,11 @@ describe("applyEdits", () => {
     const out = applyEdits("const y = 2;\n", [{ oldText: "2", newText: "42" }]);
     expect(out).toBe("const y = 42;\n");
   });
+
+  it("treats $ in newText literally (no replacement-pattern expansion)", () => {
+    const out = applyEdits("call(OLD)\n", [{ oldText: "OLD", newText: "f($&, $1)" }]);
+    expect(out).toBe("call(f($&, $1))\n");
+  });
 });
 
 describe("buildEditDiff", () => {

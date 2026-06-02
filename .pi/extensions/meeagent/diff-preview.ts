@@ -7,11 +7,12 @@ export interface EditOp {
   newText: string;
 }
 
-/** Apply sequential exact-text replacements (preview-only; pi's edit tool is authoritative). */
+/** Apply sequential exact-text replacements (preview-only; pi's edit tool is authoritative).
+ * Uses a function replacer so `$`-sequences in newText are inserted literally. */
 export function applyEdits(content: string, edits: EditOp[]): string {
   let out = content;
   for (const { oldText, newText } of edits) {
-    out = out.replace(oldText, newText);
+    out = out.replace(oldText, () => newText);
   }
   return out;
 }
