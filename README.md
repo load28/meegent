@@ -17,16 +17,12 @@ bun start   # (= ./bin/meeagent) 이 repo를 대상으로 pinned pi 실행
 meeagent 에이전트가 그 프로젝트를 대상으로 동작한다. 타깃 repo의 git에는 `.pi/`를 넣지 않는다
 (예: `.git/info/exclude`에 `.pi/` 추가).
 
-`<target>/.pi/settings.json`:
+`<target>/.pi/settings.json` (pi는 project-local `.pi/settings.json`은 읽지만 keybindings는 글로벌만 읽으므로, 단축키는 건드리지 않는다):
 ```json
 {
   "model": "openrouter/anthropic/claude-3.5-sonnet",
   "extensions": ["/Users/seominyong/Downloads/source/meeagent/.pi/extensions/meeagent"]
 }
-```
-`<target>/.pi/keybindings.json`:
-```json
-{ "app.thinking.cycle": "ctrl+t" }
 ```
 실행 (이 repo의 pinned pi 사용, OpenRouter 키는 이 repo의 `.env.local`에서 로드):
 ```bash
@@ -36,7 +32,7 @@ set -a; . /Users/seominyong/Downloads/source/meeagent/.env.local; set +a
 ```
 
 ## 기능
-- **Shift+Tab**: 권한 모드 순환 `default → ⏵⏵ accept edits → ⏸ plan`.
+- **Ctrl+Alt+P**: 권한 모드 순환 `default → ⏵⏵ accept edits → ⏸ plan`. (pi가 shift+tab을 예약하고 keybindings가 글로벌 전용이라, 글로벌 설정 없이 쓰려고 Ctrl+Alt+P를 택함 — pi 공식 plan-mode 예제와 동일.)
 - **플랜 모드**: 읽기 전용 탐색 → "Plan:" 마크다운 → Approve / Stay / Refine.
 - **diff 승인**(default 모드): 파일 수정 전 적·녹 diff 카드 → `a` 승인 / `r` 거절 / `c` 피드백.
 - **accept edits 모드**: diff 카드 없이 자동 적용.

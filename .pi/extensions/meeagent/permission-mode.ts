@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Key } from "@mariozechner/pi-tui";
 import type { ModeState, PermissionMode } from "./mode-state.js";
 
 export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls"];
@@ -26,7 +27,9 @@ export function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: Permiss
 export function setupPermissionMode(pi: ExtensionAPI, state: ModeState): void {
   // The handler for entering/leaving plan mode (prompt injection, plan gate)
   // lives in plan-mode.ts and reacts via state.onChange there.
-  pi.registerShortcut("shift+tab", {
+  // pi reserves shift+tab (app.thinking.cycle) for built-ins and keybindings are global-only,
+  // so use Ctrl+Alt+P (same key as pi's official plan-mode example) to stay zero-global.
+  pi.registerShortcut(Key.ctrlAlt("p"), {
     description: "Cycle permission mode (default → accept edits → plan)",
     handler: async (ctx) => {
       const next = state.cycle();

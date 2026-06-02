@@ -1021,7 +1021,8 @@ git commit -m "feat: add launcher and project README"
 
 ## Spike Results
 
-> Task 0 완료 후 채운다:
-> - renderDiff(표준 patch): ☐ OK / ☐ 폴백 colorizer
-> - shift+tab 핸들러: ☐ OK / ☐ 폴백 Ctrl+Alt+P
-> - OpenRouter env 인식: ☐ OK / ☐ settings.json provider 명시
+실측 결과:
+- **renderDiff**: ☑ 폴백 — 전역 테마(`initTheme()`) 의존이라 `ctx.ui.custom` 콜백의 세션 테마로 직접 색칠.
+- **단축키**: ☑ 폴백 **Ctrl+Alt+P** — pi는 shift+tab(`app.thinking.cycle`)을 예약(`RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS`)하고 extension 단축키를 skip한다. keybindings는 글로벌 전용(`~/.pi/agent/keybindings.json`)이라 project-local로 풀 수 없다. → `Key.ctrlAlt("p")` 사용(pi 공식 plan-mode 예제와 동일, 글로벌 0).
+- **OpenRouter**: ☑ `.pi/settings.json`의 `model` + `OPENROUTER_API_KEY` env. 키 없으면 "No models available"이 뜸 → 실제 키를 env에 로드해야 모델이 활성화됨.
+- **키 입력 API**: pi 문서 예제의 `onKey`는 실제 타입에 없음 → `Component.handleInput(data)` + `matchesKey(data, Key.escape)` 사용.
