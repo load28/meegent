@@ -6,33 +6,33 @@ pi(`@mariozechner/pi-coding-agent`) 위에 Claude Code식 플랜모드와 diff �
 1. `cp .env .env.local` 후 `.env.local`의 `OPENROUTER_API_KEY`에 실제 키 입력.
 2. `bun install`
 
-## 글로벌 CLI로 설치 (아무 프로젝트에서 실행)
-`meeagent`를 전역 명령으로 만들어 **어느 프로젝트 디렉토리에서든** 그 프로젝트를 대상으로 실행한다.
-타깃 프로젝트 repo에는 아무 파일도 남기지 않는다(설정·확장은 `~/.pi/agent/`, 단일 소스는 이 repo).
-
+## repo 내부에서 실행
 ```bash
-# 1) 전역 명령 등록 (PATH의 ~/.local/bin)
-ln -sfn "$PWD/bin/meeagent" ~/.local/bin/meeagent
-
-# 2) 확장을 전역 발견 위치에 심볼릭 링크 (repo가 단일 소스)
-mkdir -p ~/.pi/agent/extensions
-ln -sfn "$PWD/.pi/extensions/meeagent" ~/.pi/agent/extensions/meeagent
-
-# 3) 전역 기본 설정 (모델 + shift+tab 재매핑)
-#    ~/.pi/agent/settings.json   → { "model": "openrouter/anthropic/claude-3.5-sonnet" }
-#    ~/.pi/agent/keybindings.json→ { "app.thinking.cycle": "ctrl+t" }
+bun start   # (= ./bin/meeagent) 이 repo를 대상으로 pinned pi 실행
 ```
 
-사용:
-```bash
-cd ~/path/to/any-project
-meeagent            # 그 프로젝트를 meeagent로 작업
-```
-`bin/meeagent` 안의 `MEEAGENT_HOME` 경로는 이 repo의 절대 경로다(이동 시 한 줄 수정).
+## 다른 프로젝트에서 개발 모드로 실행
+모든 확장은 이 repo 안에만 둔다(전역 설치 없음 — 패키징은 추후). 다른 프로젝트(예: tooday)에서
+그 프로젝트의 `.pi/settings.json`이 **이 repo의 확장 경로**를 가리키게 하면, 그곳에서 pi를 실행할 때
+meeagent 에이전트가 그 프로젝트를 대상으로 동작한다. 타깃 repo의 git에는 `.pi/`를 넣지 않는다
+(예: `.git/info/exclude`에 `.pi/` 추가).
 
-## repo 내부에서 바로 실행
+`<target>/.pi/settings.json`:
+```json
+{
+  "model": "openrouter/anthropic/claude-3.5-sonnet",
+  "extensions": ["/Users/seominyong/Downloads/source/meeagent/.pi/extensions/meeagent"]
+}
+```
+`<target>/.pi/keybindings.json`:
+```json
+{ "app.thinking.cycle": "ctrl+t" }
+```
+실행 (이 repo의 pinned pi 사용, OpenRouter 키는 이 repo의 `.env.local`에서 로드):
 ```bash
-bun start   # (= ./bin/meeagent) 현재 디렉토리를 대상으로 실행
+cd <target>
+set -a; . /Users/seominyong/Downloads/source/meeagent/.env.local; set +a
+/Users/seominyong/Downloads/source/meeagent/node_modules/.bin/pi
 ```
 
 ## 기능

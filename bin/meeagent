@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# meeagent — run the pi-based agent (plan mode + diff approval) on the CURRENT directory.
-# Install once: symlink this file into a PATH dir, then run `meeagent` inside any project.
-# The agent operates on the caller's working directory; extensions/config load from
-# ~/.pi/agent/ (installed globally). Nothing is written into the target project's repo.
-
-# Absolute home of this repo — holds the pinned pi binary and the OpenRouter key.
-MEEAGENT_HOME="/Users/seominyong/Downloads/source/meeagent"
-
-# Load the OpenRouter API key (kept in the repo, gitignored).
-[ -f "$MEEAGENT_HOME/.env.local" ] && set -a && . "$MEEAGENT_HOME/.env.local" && set +a
-
-# Run the pinned pi (0.73.1) in the caller's working directory.
-exec "$MEEAGENT_HOME/node_modules/.bin/pi" "$@"
+# Run the meeagent pi agent on THIS repo (dev). For other projects, see README
+# "다른 프로젝트에서 개발 모드로 실행" — point that project's .pi/settings.json at this repo's extension.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$DIR"
+# Load the OpenRouter API key (gitignored).
+[ -f .env.local ] && set -a && . ./.env.local && set +a
+# Run the pinned pi (0.73.1).
+exec ./node_modules/.bin/pi "$@"
