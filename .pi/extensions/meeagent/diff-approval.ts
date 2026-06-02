@@ -1,5 +1,5 @@
 import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import { Text, matchesKey, Key } from "@mariozechner/pi-tui";
 import type { ModeState } from "./mode-state.js";
 import { buildEditDiff, buildWriteDiff, type EditOp } from "./diff-preview.js";
 
@@ -25,12 +25,13 @@ async function askDecision(ctx: ExtensionContext, diffText: string): Promise<Dec
     const body = colorizeDiff(diffText, theme);
     const hint = theme.fg("muted", "\n[a] approve   [r] reject   [c] reject with feedback");
     const text = new Text(body + hint, 1, 1);
-    // Component.handleInput receives raw key data from TUI when this component has focus.
-    (text as Text & { handleInput(data: string): void }).handleInput = (key: string) => {
-      if (key === "a") { done("approve"); return; }
-      if (key === "r") { done("reject"); return; }
-      if (key === "c") { done("custom"); return; }
-      if (key === "escape" || key === "\x1b") { done("reject"); return; }
+    // Text is a full Component (render + invalidate); the TUI calls handleInput(data)
+    // with raw key data while this component has focus. Text doesn't declare it, so cast.
+    (text as Text & { handleInput: (data: string) => void }).handleInput = (data) => {
+      if (data === "a") done("approve");
+      else if (data === "r") done("reject");
+      else if (data === "c") done("custom");
+      else if (matchesKey(data, Key.escape)) done("reject");
     };
     return text;
   });
