@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ModeState } from "./mode-state.js";
 import { applyMode } from "./permission-mode.js";
 import { isDestructiveBash } from "./bash-safety.js";

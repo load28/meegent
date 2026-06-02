@@ -4,12 +4,13 @@ pi(`@mariozechner/pi-coding-agent`) 위에 Claude Code식 플랜모드와 diff �
 
 ## 설정
 1. `bun install`
-2. `pi`(호스트)를 전역 설치: `bun add -g @mariozechner/pi-coding-agent` (0.73.1).
+2. `pi`(호스트)를 전역 설치: `bun add -g @earendil-works/pi-coding-agent@0.78.0`.
    `~/.bun/bin`을 PATH에 추가(`export PATH="$HOME/.bun/bin:$PATH"`). `pi update`도 이때 가능.
 3. OpenRouter 키: `pi` 실행 후 `/login` → OpenRouter 선택 → 키 입력(`~/.pi/agent/auth.json`에 저장, 1회).
 
+> pi 패키지는 `@mariozechner/*`(≤0.73.1, 동결)에서 **`@earendil-works/*`(0.78.0~)** 스코프로 이전됐다.
 > 확장은 호스트 pi가 자기 런타임을 alias로 주입하므로(extension 로더), 확장은 **호스트 pi 버전의 API**를
-> 사용한다. 이 repo의 `@mariozechner/*` 0.73.1은 타입체크용 dev 의존성일 뿐이다.
+> 사용한다. 이 repo의 `@earendil-works/*` 의존성은 타입체크 기준일 뿐이며 호스트와 버전을 맞춰 둔다.
 
 ## repo 내부에서 실행
 ```bash

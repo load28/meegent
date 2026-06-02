@@ -1,5 +1,5 @@
-import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text, matchesKey, Key } from "@mariozechner/pi-tui";
+import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text, matchesKey, Key } from "@earendil-works/pi-tui";
 import type { ModeState } from "./mode-state.js";
 import { buildEditDiff, buildWriteDiff, type EditOp } from "./diff-preview.js";
 

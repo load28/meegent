@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createModeState } from "./mode-state.js";
 import { setupPermissionMode } from "./permission-mode.js";
 import { setupPlanMode } from "./plan-mode.js";
