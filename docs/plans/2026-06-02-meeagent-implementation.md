@@ -72,7 +72,7 @@ console.log("=== renderDiff ===\n" + renderDiff(patch));
 ```
 
 Run: `bun run spike/probe.ts`
-Expected: `renderDiff` 출력에 변경 라인이 색(ANSI)으로 표시됨. **만약 깨지면** diff-approval은 `renderDiff` 대신 자체 colorizer(라인 선두 `+`→녹, `-`→적)로 폴백한다 (Task 8에 기록).
+**Spike 결과(확정):** `createTwoFilesPatch` 출력은 표준 unified diff(`---/+++/@@/±`)이고 `renderDiff`가 이를 파싱한다. 단, `renderDiff`는 **전역 테마(`initTheme()`)에 의존**해 TUI 세션 밖에선 throw한다. 따라서 Task 8은 `renderDiff` 대신 **`ctx.ui.custom` 콜백이 주는 `theme`로 직접 색칠**하는 방식으로 확정한다(전역 의존 제거, 더 견고). 이 결정은 이미 Task 4/8 코드에 반영돼 있다.
 
 - [ ] **Step 2: shift+tab 단축키가 우리 핸들러로 들어오는지 확인**
 
@@ -519,19 +519,27 @@ async function readOrEmpty(absPath: string): Promise<string> {
   }
 }
 
+/** Drop the `Index:`/`===` preamble createTwoFilesPatch emits, keeping ---/+++/@@/± lines. */
+function stripPreamble(patch: string): string {
+  return patch
+    .split("\n")
+    .filter((l) => !l.startsWith("Index: ") && !/^=+$/.test(l))
+    .join("\n");
+}
+
 /** Unified diff for an `edit` tool call, computed before applying. */
 export async function buildEditDiff(path: string, edits: EditOp[], cwd: string): Promise<string> {
   const abs = resolve(cwd, path.replace(/^@/, ""));
   const before = await readOrEmpty(abs);
   const after = applyEdits(before, edits);
-  return createTwoFilesPatch(path, path, before, after, "", "", { context: 3 });
+  return stripPreamble(createTwoFilesPatch(path, path, before, after, "", "", { context: 3 }));
 }
 
 /** Unified diff for a `write` tool call, computed before applying. */
 export async function buildWriteDiff(path: string, content: string, cwd: string): Promise<string> {
   const abs = resolve(cwd, path.replace(/^@/, ""));
   const before = await readOrEmpty(abs);
-  return createTwoFilesPatch(path, path, before, content, "", "", { context: 3 });
+  return stripPreamble(createTwoFilesPatch(path, path, before, content, "", "", { context: 3 }));
 }
 ```
 
@@ -838,25 +846,40 @@ git commit -m "feat: add plan mode with read-only enforcement and approval gate"
 `.pi/extensions/meeagent/diff-approval.ts` 전체 교체:
 
 ```typescript
-import { isToolCallEventType, renderDiff, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Text, matchesKey, Key } from "@mariozechner/pi-tui";
 import type { ModeState } from "./mode-state.js";
 import { buildEditDiff, buildWriteDiff, type EditOp } from "./diff-preview.js";
 
 type Decision = "approve" | "reject" | "custom";
 
+/** Colorize a unified diff with the in-session theme's diff colors. */
+function colorizeDiff(diffText: string, theme: Theme): string {
+  return diffText
+    .split("\n")
+    .map((l) => {
+      if (l.startsWith("+++") || l.startsWith("---")) return theme.fg("muted", l);
+      if (l.startsWith("@@")) return theme.fg("accent", l);
+      if (l.startsWith("+")) return theme.fg("toolDiffAdded", l);
+      if (l.startsWith("-")) return theme.fg("toolDiffRemoved", l);
+      return theme.fg("toolDiffContext", l);
+    })
+    .join("\n");
+}
+
 /** Show the colored diff and collect a/r/c decision. */
 async function askDecision(ctx: ExtensionContext, diffText: string): Promise<Decision> {
-  const body = renderDiff(diffText);
   return ctx.ui.custom<Decision>((_tui, theme, _keys, done) => {
+    const body = colorizeDiff(diffText, theme);
     const hint = theme.fg("muted", "\n[a] approve   [r] reject   [c] reject with feedback");
     const text = new Text(body + hint, 1, 1);
-    text.onKey = (key: string) => {
-      if (key === "a") { done("approve"); return true; }
-      if (key === "r") { done("reject"); return true; }
-      if (key === "c") { done("custom"); return true; }
-      if (key === "escape") { done("reject"); return true; }
-      return true;
+    // pi-tui components receive raw key data via handleInput(data) (NOT onKey).
+    // Text is a full Component but doesn't declare handleInput, so cast to add it.
+    (text as Text & { handleInput: (data: string) => void }).handleInput = (data) => {
+      if (data === "a") done("approve");
+      else if (data === "r") done("reject");
+      else if (data === "c") done("custom");
+      else if (matchesKey(data, Key.escape)) done("reject");
     };
     return text;
   });
@@ -901,14 +924,7 @@ export function setupDiffApproval(pi: ExtensionAPI, state: ModeState): void {
 }
 ```
 
-> Task 0 Step 1에서 `renderDiff`가 표준 patch를 못 받았다면 `const body = renderDiff(diffText)`를 자체 colorizer로 교체:
-> ```typescript
-> const body = diffText.split("\n").map((l) =>
->   l.startsWith("+") && !l.startsWith("+++") ? theme.fg("success", l)
->   : l.startsWith("-") && !l.startsWith("---") ? theme.fg("error", l)
->   : theme.fg("dim", l)).join("\n");
-> ```
-> (이 경우 `askDecision`에서 `theme`를 인자로 받도록 시그니처를 조정한다.)
+> 색칠은 `ctx.ui.custom` 콜백이 주는 세션 테마로 직접 처리하므로 `renderDiff`(전역 테마 의존)를 쓰지 않는다 — Task 0 Step 1 스파이크 결론.
 
 - [ ] **Step 2: 수동 검증 — diff 승인 3분기**
 
