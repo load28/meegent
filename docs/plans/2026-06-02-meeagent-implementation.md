@@ -847,7 +847,7 @@ git commit -m "feat: add plan mode with read-only enforcement and approval gate"
 
 ```typescript
 import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import { Text, matchesKey, Key } from "@mariozechner/pi-tui";
 import type { ModeState } from "./mode-state.js";
 import { buildEditDiff, buildWriteDiff, type EditOp } from "./diff-preview.js";
 
@@ -873,12 +873,13 @@ async function askDecision(ctx: ExtensionContext, diffText: string): Promise<Dec
     const body = colorizeDiff(diffText, theme);
     const hint = theme.fg("muted", "\n[a] approve   [r] reject   [c] reject with feedback");
     const text = new Text(body + hint, 1, 1);
-    text.onKey = (key: string) => {
-      if (key === "a") { done("approve"); return true; }
-      if (key === "r") { done("reject"); return true; }
-      if (key === "c") { done("custom"); return true; }
-      if (key === "escape") { done("reject"); return true; }
-      return true;
+    // pi-tui components receive raw key data via handleInput(data) (NOT onKey).
+    // Text is a full Component but doesn't declare handleInput, so cast to add it.
+    (text as Text & { handleInput: (data: string) => void }).handleInput = (data) => {
+      if (data === "a") done("approve");
+      else if (data === "r") done("reject");
+      else if (data === "c") done("custom");
+      else if (matchesKey(data, Key.escape)) done("reject");
     };
     return text;
   });
