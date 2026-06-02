@@ -26,7 +26,9 @@ export function setupMemory(pi: ExtensionAPI): void {
     // Freeze is per-session for prefix-cache stability: distill writes made during a
     // session are intentionally not re-injected until the next session.
     frozenBlock = buildMemoryBlock(readMemory(p.projectMemory), readMemory(p.globalMemory));
-    processedCount = 0;
+    // Treat already-loaded (resumed/forked) messages as already processed, so the
+    // first agent_end captures only NEW messages rather than re-logging prior history.
+    processedCount = ctx.sessionManager.getBranch().filter((e) => e.type === "message").length;
 
     const state = readState(p.state);
     const ps = state.projects[projectKey(ctx.cwd)] ?? { lastDistillTs: 0, undistilledLogCount: 0 };
@@ -78,7 +80,7 @@ export function setupMemory(pi: ExtensionAPI): void {
         runLLM: (s, u) => runLLM(ctx, s, u),
         writeGlobal: (c) => writeMemory(p.globalMemory, c),
       });
-      ctx.ui.notify(res.updated ? "Global memory updated." : "No project memory to synthesize.", "info");
+      if (ctx.hasUI) ctx.ui.notify(res.updated ? "Global memory updated." : "No project memory to synthesize.", "info");
     },
   });
 }

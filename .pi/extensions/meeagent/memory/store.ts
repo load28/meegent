@@ -20,7 +20,11 @@ export function appendRawLog(logDir: string, date: string, entry: string): void 
 }
 
 export interface ProjectState { lastDistillTs: number; undistilledLogCount: number; }
-export interface MemoryState { projects: Record<string, ProjectState>; globalLastSynthTs: number; }
+export interface MemoryState {
+  projects: Record<string, ProjectState>;
+  /** Reserved for Phase 2 global-synthesis scheduling; not yet consumed. */
+  globalLastSynthTs: number;
+}
 
 export function readState(file: string): MemoryState {
   try { return JSON.parse(readFileSync(file, "utf8")) as MemoryState; }

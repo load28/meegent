@@ -29,4 +29,8 @@ describe("mergeFacts", () => {
     expect(out.length).toBeLessThanOrEqual(12);
     expect(out).toContain("- new");
   });
+  it("hard-caps a single oversized line to maxChars", () => {
+    const out = mergeFacts("", ["x".repeat(50)], 10);
+    expect(out.length).toBe(10);
+  });
 });

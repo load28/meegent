@@ -21,5 +21,5 @@ export function mergeFacts(existing: string, newFacts: string[], maxChars: numbe
     lines.shift(); // drop oldest
     out = lines.join("\n");
   }
-  return out;
+  return out.length > maxChars ? out.slice(0, maxChars) : out;
 }

@@ -16,4 +16,7 @@ describe("isDistillDue", () => {
   it("is not due below threshold and within interval", () => {
     expect(isDistillDue({ lastDistillTs: 500, undistilledLogCount: 1 }, 600, cfg)).toBe(false);
   });
+  it("is due exactly at the interval boundary", () => {
+    expect(isDistillDue({ lastDistillTs: 0, undistilledLogCount: 1 }, 1000, cfg)).toBe(true);
+  });
 });
