@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$DIR"
+# Load secrets if present.
+[ -f .env.local ] && set -a && . ./.env.local && set +a
+exec bun x pi "$@"
