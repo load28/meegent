@@ -48,6 +48,13 @@ pi            # 전역 pi가 위 설정으로 meeagent 확장을 로드
 - **플랜 모드**: 읽기 전용 탐색 → "Plan:" 마크다운 → Approve / Stay / Refine.
 - **diff 승인**(default 모드): 파일 수정 전 적·녹 diff 카드 → `a` 승인 / `r` 거절 / `c` 피드백.
 - **accept edits 모드**: diff 카드 없이 자동 적용.
+- **lazygit git 화면(`/git`)**: git CLI 대신 [lazygit](https://github.com/jesseduffield/lazygit) TUI로
+  git을 관리한다. `/git`은 lazygit을 **풀스크린으로 전환**(새 tmux window, lazygit 종료 시 복귀),
+  `/git split`은 **터미널 오른편 pane**에 lazygit을 띄우고 왼편 meeagent는 유지한다.
+  pi-tui가 터미널 점유를 양보하지 못하므로 화면 전환·분할은 **tmux**로 처리한다 —
+  `bin/meeagent` 런처가 대화형 실행을 tmux 세션으로 자동 래핑하므로 별도 설정 없이 동작한다
+  (lazygit은 직접 설치 필요: 예 `brew install lazygit`). tmux 밖에서 `pi`를 직접 실행한 경우엔
+  안내 메시지로 알린다.
 - **hashline 편집(`hashedit`)**: oh-my-pi식 해시 앵커 편집을 이식했다. `read`가 파일을
   `¶path#TAG`(파일 전체 4-hex 해시) 헤더 + `LINE:TEXT` 번호 라인으로 보여주고, 모델은 라인을
   다시 타이핑하지 않고 패치 DSL(`replace N..M:` / `insert before|after|head|tail:` / `delete N..M`,

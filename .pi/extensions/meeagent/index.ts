@@ -6,6 +6,7 @@ import { setupDiffApproval } from "./diff-approval.js";
 import { setupHashline } from "./hashline/setup-hashline.js";
 import { setupMemory } from "./memory/setup-memory.js";
 import { setupMcp } from "./mcp/setup-mcp.js";
+import { setupGit } from "./git/setup-git.js";
 
 export default function meeagent(pi: ExtensionAPI): void {
   const state = createModeState();
@@ -15,6 +16,7 @@ export default function meeagent(pi: ExtensionAPI): void {
   setupHashline(pi);
   setupMcp(pi, state);
   setupMemory(pi);
+  setupGit(pi);
 
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.hasUI) ctx.ui.notify("meeagent ready", "info");
