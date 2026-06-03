@@ -92,20 +92,31 @@ export interface TwoStageResult {
   stages: { stage: ReviewStage; verdict: Verdict }[];
 }
 
-/** Stage 1 gates Stage 2: code quality runs only after spec compliance passes. */
-export async function reviewTwoStage(
+export type StageRunner = (stage: ReviewStage, input: ReviewInput) => Promise<Verdict>;
+
+/**
+ * Pure two-stage ordering: spec-compliance gates code-quality (Superpowers red
+ * flag — never start code quality before spec compliance passes). Independent of
+ * pi/LLM via the injected `runStage`, so it is unit-testable.
+ */
+export async function orchestrateTwoStage(input: ReviewInput, runStage: StageRunner): Promise<TwoStageResult> {
+  const stages: { stage: ReviewStage; verdict: Verdict }[] = [];
+
+  const spec = await runStage("spec-compliance", input);
+  stages.push({ stage: "spec-compliance", verdict: spec });
+  if (!spec.pass) return { pass: false, stages };
+
+  const quality = await runStage("code-quality", input);
+  stages.push({ stage: "code-quality", verdict: quality });
+  return { pass: quality.pass, stages };
+}
+
+/** Stage 1 gates Stage 2, running each stage on the premium model via runLLM. */
+export function reviewTwoStage(
   ctx: ExtensionContext,
   reviewModel: Model<Api>,
   skill: string,
   input: ReviewInput,
 ): Promise<TwoStageResult> {
-  const stages: { stage: ReviewStage; verdict: Verdict }[] = [];
-
-  const spec = await review(ctx, reviewModel, skill, "spec-compliance", input);
-  stages.push({ stage: "spec-compliance", verdict: spec });
-  if (!spec.pass) return { pass: false, stages };
-
-  const quality = await review(ctx, reviewModel, skill, "code-quality", input);
-  stages.push({ stage: "code-quality", verdict: quality });
-  return { pass: quality.pass, stages };
+  return orchestrateTwoStage(input, (stage, inp) => review(ctx, reviewModel, skill, stage, inp));
 }
