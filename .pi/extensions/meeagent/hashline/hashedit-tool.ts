@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Type } from "typebox";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { preparePatch } from "./patch.js";
+import { snapshots } from "./snapshots.js";
 
 const DESCRIPTION = [
   "Edit existing files via hashline patches. Anchor on the `¶PATH#TAG` header and 1-indexed line",
@@ -38,17 +39,22 @@ export function setupHashlineTool(pi: ExtensionAPI): void {
     parameters,
     execute: async (_id, params, _signal, _onUpdate, ctx) => {
       const { input } = params as { input: string };
-      const res = preparePatch(input, (p) =>
-        readFileSync(resolve(ctx.cwd, p.replace(/^@/, "")), "utf8"),
+      const res = preparePatch(
+        input,
+        (p) => readFileSync(resolve(ctx.cwd, p.replace(/^@/, "")), "utf8"),
+        (p, tag) => snapshots.lookup(p, tag),
       );
       if (!res.ok) {
         return { content: [{ type: "text", text: res.error }], details: undefined };
       }
       for (const f of res.files) {
         writeFileSync(resolve(ctx.cwd, f.path.replace(/^@/, "")), f.newContent, "utf8");
+        snapshots.record(f.path, f.newContent); // so the next edit can re-ground / recover
       }
       // Re-ground: hand back the fresh tag + renumbered view for each edited file.
-      const text = res.files.map((f) => `Edited ${f.path}.\n${f.newView}`).join("\n\n");
+      const text = res.files
+        .map((f) => `Edited ${f.path}${f.recovered ? " (recovered via 3-way merge from a stale tag)" : ""}.\n${f.newView}`)
+        .join("\n\n");
       return { content: [{ type: "text", text }], details: undefined };
     },
   }));

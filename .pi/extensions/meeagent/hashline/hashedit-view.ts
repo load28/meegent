@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isReadToolResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { buildView } from "./view.js";
+import { snapshots } from "./snapshots.js";
 
 /** Heuristic: treat content with a NUL byte as binary and leave it untouched. */
 function looksBinary(s: string): boolean {
@@ -25,6 +26,8 @@ export function setupHashlineView(pi: ExtensionAPI): void {
       return; // unreadable → leave host output untouched
     }
     if (looksBinary(content)) return;
+    // Record the read snapshot so a later stale edit on this tag can 3-way recover.
+    snapshots.record(path, content);
     return { content: [{ type: "text", text: buildView(path, content, offset, limit) }] };
   });
 }

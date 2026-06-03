@@ -17,11 +17,30 @@ describe("preparePatch", () => {
     }
   });
 
-  it("rejects a stale tag before applying", () => {
+  it("rejects a stale tag with no recovery snapshot", () => {
     const patch = `*** Begin Patch\n¶a.ts#0000\ndelete 1\n*** End Patch\n`;
     const res = preparePatch(patch, () => file);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/changed|stale|hash|re-read/i);
+  });
+
+  it("recovers a stale edit via 3-way merge when the snapshot is known", () => {
+    // Model read `file` (tag T) and edits line 2; meanwhile disk drifted with a new header line.
+    const drifted = "HEADER\n" + file; // "HEADER\nL1\nL2\nL3\n"
+    const patch = `*** Begin Patch\n¶a.ts#${tag}\nreplace 2..2:\n+X\n*** End Patch\n`;
+    const res = preparePatch(patch, () => drifted, (_p, t) => (t === tag ? file : undefined));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.files[0].recovered).toBe(true);
+      expect(res.files[0].newContent).toBe("HEADER\nL1\nX\nL3\n");
+    }
+  });
+
+  it("still rejects when recovery cannot land the edit", () => {
+    const conflicting = "L1\nL2-CHANGED\nL3\n"; // the very line the model edits changed on disk
+    const patch = `*** Begin Patch\n¶a.ts#${tag}\nreplace 2..2:\n+X\n*** End Patch\n`;
+    const res = preparePatch(patch, () => conflicting, (_p, t) => (t === tag ? file : undefined));
+    expect(res.ok).toBe(false);
   });
 
   it("reports a file-not-found error", () => {

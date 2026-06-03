@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { preparePatch } from "./hashline/patch.js";
+import { snapshots } from "./hashline/snapshots.js";
 
 export interface EditOp {
   oldText: string;
@@ -58,7 +59,11 @@ export async function buildWriteDiff(path: string, content: string, cwd: string)
 export function buildHasheditDiff(patchInput: string, cwd: string):
   | { ok: true; diff: string }
   | { ok: false; error: string } {
-  const res = preparePatch(patchInput, (p) => readFileSync(resolve(cwd, p.replace(/^@/, "")), "utf8"));
+  const res = preparePatch(
+    patchInput,
+    (p) => readFileSync(resolve(cwd, p.replace(/^@/, "")), "utf8"),
+    (p, tag) => snapshots.lookup(p, tag),
+  );
   if (!res.ok) return { ok: false, error: res.error };
   const diff = res.files
     .map((f) => stripPreamble(createTwoFilesPatch(f.path, f.path, f.oldContent, f.newContent, "", "", { context: 3 })))
