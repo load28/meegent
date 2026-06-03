@@ -101,10 +101,13 @@ API 안에 담긴다. 기본 `edit`는 끄고(FULL_TOOLS에서 `edit`→`hashedi
 
 - `hashline/format.ts` — `computeFileHash`(xxHash32 low16, 4-hex)·정규화·`¶PATH#TAG`/`LINE:TEXT` 포맷터.
 - `hashline/view.ts` — `buildView(path, content, offset?, limit?)` → 헤더+번호 라인(부분 read는 절대 번호 유지).
-- `hashline/parse.ts` — 패치 DSL → 섹션/헌크/연산(`replace/insert/delete` + `+TEXT` 본문, `+`/`-` 이스케이프).
-- `hashline/apply.ts` — `applyEdits(content, edits)` 하단부터 적용 + 경계 검사.
-- `hashline/patch.ts` — `prepare(patchText, readFile)`: 파싱 → 파일 태그 검증(stale 거부) → 적용 →
-  `{ newContent, newView, error }`. diff 미리보기(diff-approval)와 실제 커밋(execute)이 **공유**.
+- `hashline/parse.ts` — 패치 DSL → 섹션/헌크/연산(`replace/insert/delete` + block 연산 + `+TEXT` 본문, `+`/`-` 이스케이프).
+- `hashline/block.ts` — `resolveBlock(lines, startLine)`: 브레이스/들여쓰기 기반 블록 범위 해석(tree-sitter 치환).
+- `hashline/apply.ts` — `applyEdits(content, edits)` 블록 해석 → 경계 자동수선(echo 제거) → 하단부터 적용 + 경계 검사.
+- `hashline/merge.ts` — `threeWayMerge(base, current, intended)`: stale 복구용 zero-fuzz 3-way 병합.
+- `hashline/snapshots.ts` — `path#TAG` 키 스냅샷 스토어(싱글톤): read·edit 시 기록, 복구 시 조회.
+- `hashline/patch.ts` — `preparePatch(patchText, readFile, recover?)`: 파싱 → 태그 검증 → (stale면 3-way 복구
+  시도) → 적용 → `{ newContent, newView, recovered }`. diff 미리보기(diff-approval)와 실제 커밋(execute)이 **공유**.
 - `hashedit-tool.ts` — `defineTool({ name:"hashedit", parameters:{input}, execute })`: `prepare`+쓰기, 응답에
   **새 `¶PATH#TAG`+갱신 뷰** 반환(재접지).
 - `hashedit-view.ts` — `tool_result`(read) 훅: 디스크에서 재계산한 앵커 뷰로 `content` 교체(텍스트 파일만).
@@ -113,28 +116,45 @@ API 안에 담긴다. 기본 `edit`는 끄고(FULL_TOOLS에서 `edit`→`hashedi
   - `diff-approval.ts` — `hashedit` 분기 추가: `patch.prepare`로 before/after 산출 → 기존 colorize diff 카드.
   - `index.ts` — `setupHashline(pi, state)` 등록.
 
-## 7. 원본과의 의도적 차이(범위 축소)
+## 7. 원본과의 차이 — 포함/치환/제외
 
-충실도와 작업량의 균형. 아래는 oh-my-pi의 *견고성 부가기능*으로, 1차에서 제외(후속):
+oh-my-pi의 견고성 기능을 모두 이식하되, 일부는 의존성을 줄여 동등 기능으로 치환한다.
 
-- `replace block`/`delete block` (tree-sitter 의존) — 라인 범위 연산만 우선.
-- 스냅샷 스토어 기반 3-way 병합 복구 — 1차는 **stale면 단순 거부**(재read 유도)만.
-- 경계 자동수선(`repairReplacementBoundaries`/델리미터 밸런싱) — 보류.
-- `patch`/`replace`/`apply_patch` 대체 모드 — hashline 1개만.
-- 해시 함수는 oh-my-pi와 **바이트 일치가 불필요**(상호운용 없음; 태그는 세션-로컬, read마다 재생성).
-  그래도 포맷 충실을 위해 xxHash32 low16/4-hex를 재현한다.
+**포함(동등 구현됨)**
+- **스냅샷 3-way 복구** (`snapshots.ts`+`merge.ts`): read·성공 edit 시점 내용을 태그로 저장하고,
+  stale 편집은 그냥 거부하는 대신 스냅샷→현재 파일 3-way 병합(zero-fuzz)으로 자동 복구. 병합 실패 시만 거부.
+- **경계 자동수선** (`apply.ts`): `replace` 본문이 범위 바로 앞/뒤 미변경 줄을 중복 echo하면 적용 전 제거.
+- **block 연산**: `replace block N:` / `delete block N` 제공.
+
+**치환(의존성 최소화, 모델-대면 기능은 동일)**
+- block 경계 해석은 **tree-sitter 대신 브레이스/들여쓰기 리졸버**(`block.ts`). 끝줄 없이 블록 지정은
+  동일하게 되나, 매크로·문자열 내 중괄호 등 엣지에서 tree-sitter만큼 정밀하진 않다(이 repo의 무거운
+  의존성 회피 철학과 일치 — LSP 스펙에서 Serena 위임을 택한 것과 동일한 트레이드오프).
+- 경계 자동수선은 oh-my-pi의 **echo 제거** 부분을 충실 구현하고, 주석/문자열 인식 델리미터 밸런서(누락
+  닫는 괄호 자동 보강)는 단순화/보류(echo 제거가 안전·고가치 부분).
+
+**제외(차이 아님/불요)**
+- `patch`/`replace`/`apply_patch` 대체 편집 모드 — hashline과 *대안* 관계라 빼도 hashline 기능엔 영향 없음.
+- 해시 함수 바이트 일치 불요(상호운용 없음; 태그는 세션-로컬, read마다 재생성). 포맷 충실을 위해 xxHash32
+  low16/4-hex만 재현.
 
 ## 8. 테스트
 
 - `format.test.ts` — 해시 결정성·4-hex 형식·후행공백 정규화 불변, 헤더/라인 포맷터.
 - `view.test.ts` — 전체/부분(offset+limit) 뷰의 절대 번호·헤더 태그.
-- `parse.test.ts` — 각 연산 파싱, `+`/`-` 이스케이프, 잘못된 문법 에러.
-- `apply.test.ts` — replace 길이 무관(1→N), insert before/after/head/tail, delete, 하단부터 적용, 경계 위반 에러.
-- `patch.test.ts` — 태그 일치 시 적용·갱신뷰, 태그 불일치 시 stale 거부(메시지).
+- `parse.test.ts` — 각 연산 파싱(블록 포함), `+`/`-` 이스케이프, 잘못된 문법 에러.
+- `apply.test.ts` — replace 길이 무관(1→N), insert before/after/head/tail, delete, 하단부터 적용,
+  경계 위반 에러, **경계 자동수선(echo 제거)**, **block 적용**.
+- `block.test.ts` — 브레이스/중첩/들여쓰기 블록 해석, 경계.
+- `merge.test.ts` — 드리프트 영역 밖 편집 안착 / 겹치면 실패.
+- `snapshots.test.ts` — 태그 키 기록·조회·LRU 축출.
+- `patch.test.ts` — 태그 일치 적용·갱신뷰, stale 단순 거부, **스냅샷 3-way 복구 성공/실패**.
+- `roundtrip.test.ts` — read뷰 태그→패치 적용→옛 태그 stale 재거부 계약.
 - 훅/툴 UI 분기(승인/거절, registerTool 시그니처)는 e2e 성격 → 타입체크 게이트.
 
 ## 9. 후속(YAGNI 보류)
 
-- block 연산(tree-sitter), 스냅샷 3-way 복구, 경계 자동수선.
+- block 경계의 tree-sitter 정밀화(현재 브레이스/들여쓰기 리졸버) — 필요 언어에서 오해석이 잦으면 도입.
+- 경계 자동수선에 주석/문자열 인식 델리미터 밸런서(누락 닫는 괄호 보강) 추가.
 - `grep`/`find` 결과에도 태그 노출(현재는 `read`만; 모델은 edit 전 `read`로 접지).
 - 토큰 절감 실측(A/B: 기본 edit vs hashedit) PoC.
