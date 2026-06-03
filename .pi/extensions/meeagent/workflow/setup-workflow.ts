@@ -34,6 +34,7 @@ import { reviewTwoStage } from "./reviewer.js";
 import { loadWorkflowConfig } from "./config.js";
 import { summarizeUsage, formatUsage } from "./caching.js";
 import { isDocPath, isTaskComplete, decideReviewOutcome, lastAssistantText, TASK_COMPLETE_MARKER } from "./gate.js";
+import { parseSignal, formatSignal, SIGNAL_PROTOCOL, type TaskSignal } from "./signal.js";
 import { isDestructiveBash } from "../bash-safety.js";
 
 const PLANS_DIR = join("docs", "superpowers", "plans");
@@ -63,9 +64,11 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
   const wf = createWorkflowState();
   let planFile: string | undefined;
   let reviewing = false; // re-entrancy guard for the agent_end review
-  let reviewCostUSD = 0; // accumulated premium-review spend this session (instrumentation)
+  let reviewCostUSD = 0; // accumulated review spend this session (instrumentation)
   let retriesUsed = 0; // fix re-injections consumed by the current task
   let blocked = false; // current task exhausted its retries — auto-loop halted, human needed
+  let buildBaseSha: string | undefined; // HEAD before the first task commit (integration-diff base)
+  const signals: TaskSignal[] = []; // compressed per-task reports the orchestrator integration-reviews
 
   function notify(ctx: ExtensionContext, msg: string, level: "info" | "warning" | "error" = "info"): void {
     if (ctx.hasUI) ctx.ui.notify(msg, level);
@@ -88,7 +91,8 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
 
   pi.registerCommand("workflow", {
     description:
-      "Superpowers 워크플로우 — brainstorm|plan|build|review|status|off (실행=저가모델, 리뷰=프리미엄)",
+      "워크플로우 — brainstorm|plan|build|review|verify|status|off " +
+      "(구현+검증=구현모델 tier, 통합 교차검증=오케스트레이터 Sonnet)",
     handler: async (args, ctx) => {
       const [cmd, ...rest] = args.trim().split(/\s+/);
       switch (cmd) {
@@ -112,9 +116,11 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
           wf.setTaskIndex(firstUndoneIndex(planTasks));
           retriesUsed = 0;
           blocked = false;
+          // Pin the integration-diff base to HEAD before any task commits land.
+          buildBaseSha = git(ctx.cwd, ["rev-parse", "HEAD"]).out.trim() || undefined;
           if (wf.taskIndex() >= planTasks.length && planTasks.length > 0) {
-            notify(ctx, "모든 task가 이미 완료됨 — verify 단계로.", "info");
-            wf.setPhase("verify");
+            notify(ctx, "모든 task가 이미 완료됨 — 통합 교차검증으로.", "info");
+            await runIntegrationReview(ctx);
             return;
           }
           await enterPhase(ctx, "execute");
@@ -128,13 +134,18 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
           retriesUsed = 0;
           await runReview(ctx);
           break;
+        case "verify":
+          // Orchestrator-tier final integration cross-file review over the whole run.
+          await runIntegrationReview(ctx);
+          break;
         case "status": {
           const cfg = loadWorkflowConfig(ctx.cwd);
           notify(
             ctx,
             `phase=${wf.phase()} task=${wf.taskIndex()} retries=${retriesUsed}/${cfg.maxReviewRetries}` +
-              `${blocked ? " ⛔BLOCKED" : ""} exec=${cfg.execModel} review=${cfg.reviewModel} ` +
-              `cache=${cfg.cacheRetention} reviewCost=$${reviewCostUSD.toFixed(6)} plan=${planFile ?? "-"}`,
+              `${blocked ? " ⛔BLOCKED" : ""} impl=${cfg.execModel} self-review=${cfg.selfReviewModel} ` +
+              `integration=${cfg.reviewModel} cache=${cfg.cacheRetention} reviewCost=$${reviewCostUSD.toFixed(6)} ` +
+              `signals=${signals.length} plan=${planFile ?? "-"}`,
           );
           break;
         }
@@ -183,9 +194,13 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
     if (!skillName) return;
     let block = loadSkill(skillName);
     if (!block) return;
-    if (phase === "execute" && planFile) {
-      const task = currentTask();
-      if (task) block += `\n\n[현재 TASK ${task.index}] ${task.title}`;
+    if (phase === "execute") {
+      if (planFile) {
+        const task = currentTask();
+        if (task) block += `\n\n[현재 TASK ${task.index}] ${task.title}`;
+      }
+      // The implementer reports back to the orchestrator only via the fixed schema.
+      block += `\n\n${SIGNAL_PROTOCOL}`;
     }
     return { systemPrompt: `${event.systemPrompt}\n\n${block}` };
   });
@@ -195,8 +210,9 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
   // blocked (retries exhausted) the auto-loop stays off until the human acts.
   pi.on("agent_end", async (event, ctx) => {
     if (wf.phase() !== "execute" || reviewing || blocked) return;
-    if (!isTaskComplete(lastAssistantText(event.messages))) return;
-    await runReview(ctx);
+    const text = lastAssistantText(event.messages);
+    if (!isTaskComplete(text)) return;
+    await runReview(ctx, text);
   });
 
   function readPlan(cwd: string): string | undefined {
@@ -213,11 +229,17 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
   }
   let planTasks: PlanTask[] | undefined;
 
-  async function runReview(ctx: ExtensionContext): Promise<void> {
+  /**
+   * Per-task verify/refine — runs on the IMPLEMENTER tier (selfReviewModel), so the
+   * verify/refine loop stays cheap and closed locally. On pass it records the task's
+   * compressed signal and, when the plan is finished, hands off to the orchestrator-
+   * tier integration review. On fail it re-injects feedback into the same tier.
+   */
+  async function runReview(ctx: ExtensionContext, signalText?: string): Promise<void> {
     const cfg = loadWorkflowConfig(ctx.cwd);
-    const reviewModel = resolveModel(ctx, cfg.reviewModel);
-    if (!reviewModel) {
-      notify(ctx, `리뷰 모델 resolve 실패: ${cfg.reviewModel}`, "warning");
+    const selfReviewModel = resolveModel(ctx, cfg.selfReviewModel);
+    if (!selfReviewModel) {
+      notify(ctx, `자체 리뷰 모델 resolve 실패: ${cfg.selfReviewModel}`, "warning");
       return;
     }
     const planMd = readPlan(ctx.cwd);
@@ -228,8 +250,7 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
     planTasks = parseTasks(planMd);
     const task = currentTask();
     if (!task) {
-      notify(ctx, "모든 task 완료 — verify 단계로.", "info");
-      wf.setPhase("verify");
+      await runIntegrationReview(ctx);
       return;
     }
 
@@ -241,17 +262,17 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
     try {
       const result = await reviewTwoStage(
         ctx,
-        reviewModel,
+        selfReviewModel,
         loadSkill("code-review"),
         { taskSpec: task.title, diff, testOutput },
         {
           cacheRetention: cfg.cacheRetention,
           // Both stages share this id so Stage 2 reuses Stage 1's cached prefix.
-          sessionId: `meeagent-review-task-${task.index}`,
+          sessionId: `meeagent-selfreview-task-${task.index}`,
           onUsage: (u) => {
             const s = summarizeUsage(u);
             reviewCostUSD += s.costUSD;
-            notify(ctx, formatUsage(`리뷰 task ${task.index}`, s));
+            notify(ctx, formatUsage(`자체리뷰 task ${task.index}`, s));
           },
         },
       );
@@ -264,9 +285,23 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
         } catch { /* ignore */ }
         git(ctx.cwd, ["add", "-A"]);
         git(ctx.cwd, ["commit", "-m", `workflow: task ${task.index} — ${task.title}`]);
+        // Record the compressed signal — the only thing that crosses to the orchestrator.
+        const sig = signalText ? parseSignal(signalText) : undefined;
+        if (sig) {
+          signals.push(sig);
+          notify(ctx, `task ${task.index} 신호 기록:\n${formatSignal(sig)}`);
+        } else if (signalText) {
+          notify(ctx, `task ${task.index}: 압축 신호 누락(스키마 미준수) — diff로만 통합검증.`, "warning");
+        }
         wf.nextTask();
         retriesUsed = 0; // fresh budget for the next task
         notify(ctx, `✅ task ${task.index} 통과 — 커밋 후 다음 task(${wf.taskIndex()}).`);
+        // Plan finished → orchestrator-tier integration cross-file review.
+        if (wf.taskIndex() >= planTasks.length) {
+          notify(ctx, "모든 task 완료 — 통합 교차검증으로.", "info");
+          reviewing = false; // release the per-task guard before the integration pass
+          await runIntegrationReview(ctx);
+        }
         return;
       }
 
@@ -287,7 +322,7 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
         return;
       }
 
-      // retry: re-inject the blocking feedback into the cheap implementer.
+      // retry: re-inject the blocking feedback into the implementer tier (loop closed locally).
       retriesUsed++;
       notify(ctx, `❌ task ${task.index} 리뷰 실패 — 수정 재투입(${retriesUsed}/${cfg.maxReviewRetries}).`, "warning");
       pi.sendMessage(
@@ -295,10 +330,82 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
           customType: "meeagent-review-feedback",
           content:
             `리뷰 피드백(아래 이슈를 수정하고 같은 task를 다시 완료하세요). ` +
-            `완료되면 마지막 줄에 ${TASK_COMPLETE_MARKER} 를 출력하세요:\n${blocking}`,
+            `완료되면 ${TASK_COMPLETE_MARKER} + 압축 신호 블록을 출력하세요:\n${blocking}`,
           display: true,
         },
         { triggerTurn: true },
+      );
+    } finally {
+      reviewing = false;
+    }
+  }
+
+  /**
+   * Orchestrator-tier final review (section 8.3): a SINGLE cross-file pass on the
+   * premium model over the whole run's diff. Its context is the accumulated
+   * compressed signals (changed interfaces/contracts) + the full diff + tests —
+   * never the implementer transcripts. This is where narrow-slice integration bugs
+   * (the weakness of small task splitting) are caught.
+   */
+  async function runIntegrationReview(ctx: ExtensionContext): Promise<void> {
+    const cfg = loadWorkflowConfig(ctx.cwd);
+    wf.setPhase("verify");
+    const reviewModel = resolveModel(ctx, cfg.reviewModel);
+    if (!reviewModel) {
+      notify(ctx, `통합 리뷰 모델 resolve 실패: ${cfg.reviewModel}`, "warning");
+      return;
+    }
+    // Bring the orchestrator back as the active session model for the verify phase.
+    await swapTo(pi, reviewModel);
+
+    const range = buildBaseSha ? `${buildBaseSha}..HEAD` : "HEAD";
+    const diff = git(ctx.cwd, ["diff", range]).out || "(no diff)";
+    const testRun = spawnSync("bun", ["run", "test"], { cwd: ctx.cwd, encoding: "utf8" });
+    const testOutput = `${testRun.stdout ?? ""}${testRun.stderr ?? ""}`.slice(-4000);
+    const ledger = signals.length
+      ? signals.map((s, i) => `### task ${i}\n${formatSignal(s)}`).join("\n\n")
+      : "(압축 신호 없음 — diff만으로 교차검증)";
+
+    if (reviewing) return;
+    reviewing = true;
+    try {
+      const result = await reviewTwoStage(
+        ctx,
+        reviewModel,
+        loadSkill("code-review"),
+        {
+          taskSpec:
+            "통합 교차검증: 아래 task별 압축 신호(변경된 인터페이스/시그니처/계약 포함)를 근거로, " +
+            "좁게 분할된 조각들 사이의 cross-file 상호작용·계약 불일치·통합 버그를 점검한다.\n\n" +
+            ledger,
+          diff,
+          testOutput,
+        },
+        {
+          cacheRetention: cfg.cacheRetention,
+          sessionId: "meeagent-integration-review",
+          onUsage: (u) => {
+            const s = summarizeUsage(u);
+            reviewCostUSD += s.costUSD;
+            notify(ctx, formatUsage("통합 교차검증", s));
+          },
+        },
+      );
+
+      if (result.pass) {
+        wf.setPhase("finish");
+        notify(ctx, "✅ 통합 교차검증 통과 — verify 완료. /git 으로 머지/PR 진행 가능.");
+        return;
+      }
+      const blocking = result.stages
+        .flatMap((s) => s.verdict.issues)
+        .filter((i) => i.severity === "Critical" || i.severity === "Important")
+        .map((i) => `- [${i.severity}] ${i.text}`)
+        .join("\n");
+      notify(
+        ctx,
+        `❌ 통합 교차검증 미통과 — 통합 이슈를 확인하고 /workflow build 로 해당 task를 다시 여세요:\n${blocking}`,
+        "error",
       );
     } finally {
       reviewing = false;

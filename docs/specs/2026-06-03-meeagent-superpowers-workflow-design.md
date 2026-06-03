@@ -257,3 +257,59 @@ writing-plans 문서에서 다음 task pop
 
 본 설계 승인 후 → `docs/plans/2026-06-03-meeagent-superpowers-workflow.md`(구현 플랜, task별
 `- [ ]` TDD)를 작성하고, §11 스파이크부터 착수한다.
+
+---
+
+## 13. 부록 — 비용·아키텍처 전략 §8 토폴로지 재정렬 (2026-06-03)
+
+본 설계(§3–§5)는 *메인루프=구현자(Haiku) / 매 task 리뷰=Sonnet* 토폴로지였다. 비용·프라이버시·
+아키텍처 전략 문서의 **결말(§8)** 은 토폴로지를 뒤집는다 — 그쪽 구조로 구현을 재정렬했다.
+
+### 13.1 역할 재배치
+
+```
+[오케스트레이터 / Sonnet]  brainstorm · plan · 최종 통합 cross-file 교차검증(verify 1회)
+        │  좁은 task 스펙 위임
+        ▼
+[구현자 / Qwen3-Coder-Next]  좁은 구현 + 검증 + 정제 루프 (루프를 구현 tier에서 닫음)
+        │  압축 신호만 반환
+        └── status / changed_files / summary / blockers / next
+```
+
+- **구현 tier = `qwen/qwen3-coder-next`**(계획 중인 로컬 Qwen3-Coder-Next의 OpenRouter stand-in;
+  cacheRead $0.07로 캐싱 유지). 구 exec tier(Haiku)는 아카이브.
+- **검증·정제 루프(토큰의 ~59%)를 프리미엄에서 내림**: per-task self-review =
+  `selfReviewModel`(기본 = `execModel`). 리뷰 실패 피드백 재투입도 구현 tier 안에서 닫는다.
+- **Sonnet은 오케스트레이션 + 최종 통합 교차검증만**: 모든 task 통과 후 verify 단계에서 전체
+  diff(`buildBaseSha..HEAD`) + 누적 압축 신호로 cross-file 통합 버그를 1회 점검(좁은 분할의 약점 보완).
+
+### 13.2 압축 신호 경계 (전략문서 §8.2)
+
+구현자→오케스트레이터로 넘어가는 유일한 출력은 고정 스키마(`workflow/signal.ts`):
+`status / changed_files / summary / blockers / next`. 파일 본문·중간 재시도·통과 테스트 로그는
+넘기지 않는다(원본 누수·재과금 구조적 차단). 통합 교차검증은 이 신호 ledger + diff를 보고, 구현자
+트랜스크립트는 보지 않는다. TDD 스킬이 완료 시 `[[TASK-COMPLETE]]` + ```signal 블록을 출력하도록
+프로토콜(`SIGNAL_PROTOCOL`)을 execute 단계 프리픽스로 주입한다.
+
+### 13.3 설정 (`.pi/settings.json`)
+
+```jsonc
+{
+  "model": "openrouter/anthropic/claude-sonnet-4.6",       // 오케스트레이터
+  "workflow": {
+    "execModel":       "openrouter/qwen/qwen3-coder-next",  // 구현 tier(로컬 stand-in)
+    "selfReviewModel": "openrouter/qwen/qwen3-coder-next",  // 검증·정제 루프(구현 tier에서 닫음)
+    "reviewModel":     "openrouter/anthropic/claude-sonnet-4.6", // 최종 통합 교차검증(오케스트레이터)
+    "cacheRetention": "short",
+    "maxReviewRetries": 3
+  }
+}
+```
+
+### 13.4 명령
+
+`/workflow brainstorm | plan | build | review | verify | status | off`. `build`는 미완료 task부터
+재개하며 첫 커밋 전 HEAD를 통합-diff 베이스로 고정한다. 모든 task 통과 시 자동으로 `verify`(통합
+교차검증)로 넘어가고, 수동으로는 `/workflow verify`로 호출한다.
+
+> 라이브 토큰·비용은 OpenRouter 대시보드에서 직접 확인한다(측정 하네스는 이 repo에 두지 않음).

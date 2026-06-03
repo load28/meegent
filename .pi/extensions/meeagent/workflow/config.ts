@@ -12,7 +12,19 @@ import type { CacheRetention } from "@earendil-works/pi-ai";
 import { DEFAULT_EXEC_MODEL, DEFAULT_REVIEW_MODEL } from "./tiering.js";
 
 export interface WorkflowConfig {
+  /** Implementer tier — narrow implementation (stand-in for local Qwen3-Coder-Next). */
   execModel: string;
+  /**
+   * Per-task verify/refine review. Runs on the IMPLEMENTER tier by default so the
+   * verify/refine loop (the ~59% token cost) stays cheap and the loop is closed
+   * locally — not on the premium model. Defaults to `execModel` when unset.
+   */
+  selfReviewModel: string;
+  /**
+   * Orchestrator tier — the final, once-per-run integration cross-file review
+   * over the whole diff (premium / Sonnet). Kept named `reviewModel` so existing
+   * `.pi/settings.json` files keep working.
+   */
   reviewModel: string;
   cacheRetention: CacheRetention;
   /** Max fix re-injections per task before halting and escalating to the human. */
@@ -29,8 +41,11 @@ export function parseWorkflowConfig(raw: unknown): WorkflowConfig {
     raw && typeof raw === "object" && "workflow" in raw
       ? (raw as { workflow?: Record<string, unknown> }).workflow ?? {}
       : {};
+  const execModel = typeof wf.execModel === "string" ? wf.execModel : DEFAULT_EXEC_MODEL;
   return {
-    execModel: typeof wf.execModel === "string" ? wf.execModel : DEFAULT_EXEC_MODEL,
+    execModel,
+    // The verify/refine loop is closed on the implementer tier: default to execModel.
+    selfReviewModel: typeof wf.selfReviewModel === "string" ? wf.selfReviewModel : execModel,
     reviewModel: typeof wf.reviewModel === "string" ? wf.reviewModel : DEFAULT_REVIEW_MODEL,
     cacheRetention: isRetention(wf.cacheRetention) ? wf.cacheRetention : "short",
     maxReviewRetries:

@@ -9,23 +9,33 @@ describe("workflow config", () => {
   it("falls back to defaults when the workflow block is missing", () => {
     expect(parseWorkflowConfig({})).toEqual({
       execModel: DEFAULT_EXEC_MODEL,
+      // The verify/refine loop is closed on the implementer tier → defaults to execModel.
+      selfReviewModel: DEFAULT_EXEC_MODEL,
       reviewModel: DEFAULT_REVIEW_MODEL,
       cacheRetention: "short",
       maxReviewRetries: 3,
     });
   });
 
+  it("defaults selfReviewModel to execModel (verify/refine stays on the cheap tier)", () => {
+    expect(parseWorkflowConfig({ workflow: { execModel: "openrouter/qwen/qwen3-coder-flash" } }).selfReviewModel).toBe(
+      "openrouter/qwen/qwen3-coder-flash",
+    );
+  });
+
   it("reads overrides from the workflow block", () => {
     const cfg = parseWorkflowConfig({
       workflow: {
-        execModel: "openrouter/anthropic/claude-haiku-4.5",
+        execModel: "openrouter/qwen/qwen3-coder-next",
+        selfReviewModel: "openrouter/qwen/qwen3-coder-flash",
         reviewModel: "openrouter/anthropic/claude-sonnet-4.6",
         cacheRetention: "long",
         maxReviewRetries: 5,
       },
     });
     expect(cfg).toEqual({
-      execModel: "openrouter/anthropic/claude-haiku-4.5",
+      execModel: "openrouter/qwen/qwen3-coder-next",
+      selfReviewModel: "openrouter/qwen/qwen3-coder-flash",
       reviewModel: "openrouter/anthropic/claude-sonnet-4.6",
       cacheRetention: "long",
       maxReviewRetries: 5,
