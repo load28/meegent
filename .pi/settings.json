@@ -1,3 +1,8 @@
 {
-  "model": "openrouter/anthropic/claude-3.5-sonnet"
+  "model": "openrouter/anthropic/claude-sonnet-4.6",
+  "workflow": {
+    "execModel": "openrouter/anthropic/claude-haiku-4.5",
+    "reviewModel": "openrouter/anthropic/claude-sonnet-4.6",
+    "cacheRetention": "short"
+  }
 }
