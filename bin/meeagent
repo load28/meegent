@@ -4,6 +4,13 @@ set -euo pipefail
 # "다른 프로젝트에서 개발 모드로 실행" — point that project's .pi/settings.json at this repo's extension.
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
+# The /git command opens lazygit in a tmux window/pane (pi-tui can't release the
+# terminal, so a multiplexer is the only safe way). Re-exec inside tmux for
+# interactive sessions so /git just works. $TMUX guards against re-wrapping; skip
+# for non-TTY (print/piped) runs.
+if [ -z "${TMUX:-}" ] && [ -t 0 ] && [ -t 1 ] && command -v tmux >/dev/null 2>&1; then
+  exec tmux new-session -- "$0" "$@"
+fi
 # Load the OpenRouter API key (gitignored).
 [ -f .env.local ] && set -a && . ./.env.local && set +a
 # Run the pinned pi (0.73.1).
