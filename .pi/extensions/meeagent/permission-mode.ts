@@ -5,7 +5,8 @@ import type { ModeState, PermissionMode } from "./mode-state.js";
 // every mode — including plan — because mutating MCP calls are gated separately
 // by the mcp safety guard (see mcp/setup-mcp.ts), not by this allow-list.
 export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls", "mcp"];
-export const FULL_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls", "mcp"];
+// `hashedit` (hashline) replaces the host `edit`; `write` stays for creating new files.
+export const FULL_TOOLS = ["read", "bash", "hashedit", "write", "grep", "find", "ls", "mcp"];
 
 /** Apply the tool allow-list and footer badge for a mode. */
 export function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: PermissionMode): void {
