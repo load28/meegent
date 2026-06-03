@@ -18,6 +18,17 @@ vitest로 단위 테스트한다. pi 훅·툴·커맨드 wiring(`setup-workflow`
 > 32개 단위·통합 테스트 통과, 전체 132 테스트 + `tsc --noEmit` 그린. **남은 것: Task 10.2 라이브 스모크**
 > — `OPENROUTER_API_KEY`가 설정된 세션에서 Haiku 실행 + Sonnet 리뷰 + `Usage.cacheRead` 적중/비용 로그
 > 실측(설계 §6). 스파이크 결과는 `docs/superpowers/specs/2026-06-03-spike-notes.md`.
+>
+> **토큰 최적화 배선 패스(후속):** 설계 §6의 캐싱·계측이 `caching.ts`에 만들어져 있었으나 실제
+> `complete()` 호출 경로에 연결돼 있지 않던 것을 연결. (1) `runLLM`이 `cacheRetention`/`sessionId`를
+> `complete()`에 전달하고 `onUsage`로 `Usage`를 노출(`memory/llm.ts`). (2) 2단계 리뷰어가 공유
+> 컨텍스트(skill+spec+diff+test)를 **system 프리픽스**로 고정하고 단계별 focus만 user로 분리해
+> Stage 2가 Stage 1의 캐시(cacheRead)를 재사용(`reviewer.ts`), 두 단계가 동일 `sessionId` 공유.
+> (3) 설정 로더 일원화(`workflow/config.ts`)로 `cacheRetention`이 실제로 읽힘. (4) `/workflow status`에
+> 누적 리뷰 비용 표시 + 리뷰마다 `Usage` 로그(`formatUsage`). (5) 메모리 distill/synthesize를 저가
+> exec 모델 + 캐싱으로 라우팅(`memory/setup-memory.ts`). 전체 137 테스트 + 타입체크 그린.
+> 메인 실행 루프의 `cacheRetention` 주입은 `before_provider_request` payload가 불투명하므로 라이브
+> 스파이크 0.2 이후로 유지(프로바이더 기본값 "short").
 
 ---
 

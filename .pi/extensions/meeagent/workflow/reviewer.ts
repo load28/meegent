@@ -10,7 +10,7 @@
  * with the review model and are typecheck-gated.
  */
 
-import type { Model, Api } from "@earendil-works/pi-ai";
+import type { Model, Api, Usage, CacheRetention } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { runLLM } from "../memory/llm.js";
 
@@ -60,30 +60,49 @@ export interface ReviewInput {
   testOutput: string;
 }
 
-function buildPrompt(skill: string, stage: ReviewStage, input: ReviewInput): { system: string; user: string } {
-  const focus =
-    stage === "spec-compliance"
-      ? "Stage 1 — SPEC COMPLIANCE: does the diff implement exactly the task spec? Flag over/under-building."
-      : "Stage 2 — CODE QUALITY: patterns, edge cases, test coverage, maintainability.";
-  const system =
-    `${skill}\n\n${focus}\n` +
+/**
+ * The shared review context (skill + spec + diff + test output + report format) is
+ * the SYSTEM prompt and is byte-identical across both stages. Only the per-stage
+ * focus varies, and it goes in the small USER message. This keeps the large,
+ * expensive prefix stable so Stage 2 reuses Stage 1's prompt cache (cacheRead)
+ * instead of re-billing the whole diff at full input price.
+ */
+function buildSystem(skill: string, input: ReviewInput): string {
+  return (
+    `${skill}\n\n` +
+    `## Task spec\n${input.taskSpec}\n\n` +
+    `## Diff under review\n${input.diff}\n\n` +
+    `## Test output\n${input.testOutput}\n\n` +
     `Report issues one per line, each tagged [Critical], [Important], or [Minor]. ` +
-    `End with "VERDICT: PASS" if there are no Critical/Important issues, else "VERDICT: FAIL".`;
-  const user =
-    `## Task spec\n${input.taskSpec}\n\n## Diff under review\n${input.diff}\n\n## Test output\n${input.testOutput}`;
-  return { system, user };
+    `End with "VERDICT: PASS" if there are no Critical/Important issues, else "VERDICT: FAIL".`
+  );
 }
 
-/** Run one review stage on the premium model with isolated context. */
+function stageFocus(stage: ReviewStage): string {
+  return stage === "spec-compliance"
+    ? "Stage 1 — SPEC COMPLIANCE: does the diff implement exactly the task spec? Flag over/under-building."
+    : "Stage 2 — CODE QUALITY: patterns, edge cases, test coverage, maintainability.";
+}
+
+export interface ReviewOptions {
+  cacheRetention?: CacheRetention;
+  sessionId?: string;
+  onUsage?: (usage: Usage) => void;
+}
+
+/** Run one review stage on the premium model with isolated, cache-friendly context. */
 export async function review(
   ctx: ExtensionContext,
   reviewModel: Model<Api>,
   skill: string,
   stage: ReviewStage,
   input: ReviewInput,
+  opts: ReviewOptions = {},
 ): Promise<Verdict> {
-  const { system, user } = buildPrompt(skill, stage, input);
-  const text = await runLLM(ctx, system, user, reviewModel);
+  const text = await runLLM(ctx, buildSystem(skill, input), stageFocus(stage), {
+    model: reviewModel,
+    ...opts,
+  });
   return parseVerdict(text);
 }
 
@@ -111,12 +130,17 @@ export async function orchestrateTwoStage(input: ReviewInput, runStage: StageRun
   return { pass: quality.pass, stages };
 }
 
-/** Stage 1 gates Stage 2, running each stage on the premium model via runLLM. */
+/**
+ * Stage 1 gates Stage 2, running each stage on the premium model via runLLM. Both
+ * stages share `opts` (same sessionId + cacheRetention), so Stage 2 hits the cache
+ * written by Stage 1 for the identical system prefix.
+ */
 export function reviewTwoStage(
   ctx: ExtensionContext,
   reviewModel: Model<Api>,
   skill: string,
   input: ReviewInput,
+  opts: ReviewOptions = {},
 ): Promise<TwoStageResult> {
-  return orchestrateTwoStage(input, (stage, inp) => review(ctx, reviewModel, skill, stage, inp));
+  return orchestrateTwoStage(input, (stage, inp) => review(ctx, reviewModel, skill, stage, inp, opts));
 }
