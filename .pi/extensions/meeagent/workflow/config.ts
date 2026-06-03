@@ -15,6 +15,8 @@ export interface WorkflowConfig {
   execModel: string;
   reviewModel: string;
   cacheRetention: CacheRetention;
+  /** Max fix re-injections per task before halting and escalating to the human. */
+  maxReviewRetries: number;
 }
 
 function isRetention(v: unknown): v is CacheRetention {
@@ -31,6 +33,10 @@ export function parseWorkflowConfig(raw: unknown): WorkflowConfig {
     execModel: typeof wf.execModel === "string" ? wf.execModel : DEFAULT_EXEC_MODEL,
     reviewModel: typeof wf.reviewModel === "string" ? wf.reviewModel : DEFAULT_REVIEW_MODEL,
     cacheRetention: isRetention(wf.cacheRetention) ? wf.cacheRetention : "short",
+    maxReviewRetries:
+      typeof wf.maxReviewRetries === "number" && Number.isFinite(wf.maxReviewRetries) && wf.maxReviewRetries >= 0
+        ? Math.floor(wf.maxReviewRetries)
+        : 3,
   };
 }
 
