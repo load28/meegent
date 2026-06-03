@@ -41,7 +41,7 @@ export function preparePatch(patchText: string, readFile: (path: string) => stri
     if (actual === section.tag) {
       // Fresh tag: apply directly.
       try {
-        newContent = applyEdits(oldContent, section.edits);
+        newContent = applyEdits(oldContent, section.edits, section.path);
       } catch (e) {
         return { ok: false, error: `Edit rejected (${section.path}): ${(e as Error).message}` };
       }
@@ -51,7 +51,7 @@ export function preparePatch(patchText: string, readFile: (path: string) => stri
       let merged: string | undefined;
       if (base !== undefined) {
         try {
-          const intended = applyEdits(base, section.edits);
+          const intended = applyEdits(base, section.edits, section.path);
           const r = threeWayMerge(base, oldContent, intended);
           if (r.ok) merged = r.content;
         } catch {

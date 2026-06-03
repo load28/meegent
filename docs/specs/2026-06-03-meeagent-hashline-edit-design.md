@@ -102,7 +102,8 @@ API 안에 담긴다. 기본 `edit`는 끄고(FULL_TOOLS에서 `edit`→`hashedi
 - `hashline/format.ts` — `computeFileHash`(xxHash32 low16, 4-hex)·정규화·`¶PATH#TAG`/`LINE:TEXT` 포맷터.
 - `hashline/view.ts` — `buildView(path, content, offset?, limit?)` → 헤더+번호 라인(부분 read는 절대 번호 유지).
 - `hashline/parse.ts` — 패치 DSL → 섹션/헌크/연산(`replace/insert/delete` + block 연산 + `+TEXT` 본문, `+`/`-` 이스케이프).
-- `hashline/block.ts` — `resolveBlock(lines, startLine)`: 브레이스/들여쓰기 기반 블록 범위 해석(tree-sitter 치환).
+- `hashline/treesitter.ts` — web-tree-sitter 로더(언어별 지연 로드·워밍) + `resolveBlockTS`(정밀 블록 해석).
+- `hashline/block.ts` — `resolveBlock(lines, startLine, path?)`: tree-sitter 우선, 실패 시 브레이스/들여쓰기 폴백.
 - `hashline/apply.ts` — `applyEdits(content, edits)` 블록 해석 → 경계 자동수선(echo 제거) → 하단부터 적용 + 경계 검사.
 - `hashline/merge.ts` — `threeWayMerge(base, current, intended)`: stale 복구용 zero-fuzz 3-way 병합.
 - `hashline/snapshots.ts` — `path#TAG` 키 스냅샷 스토어(싱글톤): read·edit 시 기록, 복구 시 조회.
@@ -125,11 +126,12 @@ oh-my-pi의 견고성 기능을 모두 이식하되, 일부는 의존성을 줄�
   stale 편집은 그냥 거부하는 대신 스냅샷→현재 파일 3-way 병합(zero-fuzz)으로 자동 복구. 병합 실패 시만 거부.
 - **경계 자동수선** (`apply.ts`): `replace` 본문이 범위 바로 앞/뒤 미변경 줄을 중복 echo하면 적용 전 제거.
 - **block 연산**: `replace block N:` / `delete block N` 제공.
+- **tree-sitter 블록 해석** (`treesitter.ts`): oh-my-pi와 동일하게 **tree-sitter**(web-tree-sitter +
+  사전빌드 `tree-sitter-wasms` 문법: ts/tsx/js/py/go/rust/java/c/cpp)로 블록 경계를 해석한다. 문자열·주석
+  안의 중괄호에 속지 않는다. 문법 wasm은 `read` 시점에 비동기 로드(워밍)되어, 편집 시점엔 동기 해석.
+  로드 실패/미지원 언어는 **브레이스/들여쓰기 휴리스틱으로 안전 폴백**(크래시 없음).
 
-**치환(의존성 최소화, 모델-대면 기능은 동일)**
-- block 경계 해석은 **tree-sitter 대신 브레이스/들여쓰기 리졸버**(`block.ts`). 끝줄 없이 블록 지정은
-  동일하게 되나, 매크로·문자열 내 중괄호 등 엣지에서 tree-sitter만큼 정밀하진 않다(이 repo의 무거운
-  의존성 회피 철학과 일치 — LSP 스펙에서 Serena 위임을 택한 것과 동일한 트레이드오프).
+**남은 단순화**
 - 경계 자동수선은 oh-my-pi의 **echo 제거** 부분을 충실 구현하고, 주석/문자열 인식 델리미터 밸런서(누락
   닫는 괄호 자동 보강)는 단순화/보류(echo 제거가 안전·고가치 부분).
 
@@ -145,7 +147,8 @@ oh-my-pi의 견고성 기능을 모두 이식하되, 일부는 의존성을 줄�
 - `parse.test.ts` — 각 연산 파싱(블록 포함), `+`/`-` 이스케이프, 잘못된 문법 에러.
 - `apply.test.ts` — replace 길이 무관(1→N), insert before/after/head/tail, delete, 하단부터 적용,
   경계 위반 에러, **경계 자동수선(echo 제거)**, **block 적용**.
-- `block.test.ts` — 브레이스/중첩/들여쓰기 블록 해석, 경계.
+- `block.test.ts` — 휴리스틱 블록 해석(브레이스/중첩/들여쓰기), 경계.
+- `treesitter.test.ts` — tree-sitter가 문자열 내 중괄호에 안 속고 정확히 해석(휴리스틱과 결과 상이), 미지원 확장자 폴백.
 - `merge.test.ts` — 드리프트 영역 밖 편집 안착 / 겹치면 실패.
 - `snapshots.test.ts` — 태그 키 기록·조회·LRU 축출.
 - `patch.test.ts` — 태그 일치 적용·갱신뷰, stale 단순 거부, **스냅샷 3-way 복구 성공/실패**.
@@ -154,7 +157,7 @@ oh-my-pi의 견고성 기능을 모두 이식하되, 일부는 의존성을 줄�
 
 ## 9. 후속(YAGNI 보류)
 
-- block 경계의 tree-sitter 정밀화(현재 브레이스/들여쓰기 리졸버) — 필요 언어에서 오해석이 잦으면 도입.
+- tree-sitter 지원 언어 확장(현재 ts/tsx/js/py/go/rust/java/c/cpp) — 필요 시 문법 wasm 추가.
 - 경계 자동수선에 주석/문자열 인식 델리미터 밸런서(누락 닫는 괄호 보강) 추가.
 - `grep`/`find` 결과에도 태그 노출(현재는 `read`만; 모델은 edit 전 `read`로 접지).
 - 토큰 절감 실측(A/B: 기본 edit vs hashedit) PoC.

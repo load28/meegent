@@ -1,3 +1,5 @@
+import { resolveBlockTS } from "./treesitter.js";
+
 const OPEN = "([{";
 const CLOSE = ")]}";
 
@@ -9,12 +11,26 @@ function indentOf(s: string): number {
 /**
  * Resolve a block starting at `startLine` (1-indexed) to a 1-indexed inclusive line range.
  *
- * Lightweight substitute for tree-sitter (kept dependency-free, matching this repo's philosophy):
- * - Brace-delimited languages: match the last bracket opened on the start line to its closer.
- * - Indentation languages: the start line plus the following run of more-indented (and interior
- *   blank) lines.
+ * Prefers tree-sitter (when the language grammar for `path` has been loaded via `ensureLanguage`);
+ * otherwise falls back to a dependency-free brace/indentation heuristic.
  */
-export function resolveBlock(lines: string[], startLine: number): { start: number; end: number } {
+export function resolveBlock(lines: string[], startLine: number, path?: string): { start: number; end: number } {
+  if (startLine < 1 || startLine > lines.length) {
+    throw new Error(`Block start ${startLine} out of bounds (1..${lines.length})`);
+  }
+  if (path) {
+    try {
+      const ts = resolveBlockTS(path, lines.join("\n"), startLine);
+      if (ts) return ts;
+    } catch {
+      // fall through to the heuristic
+    }
+  }
+  return resolveBlockHeuristic(lines, startLine);
+}
+
+/** Brace/indentation block resolver (fallback when tree-sitter is unavailable). */
+export function resolveBlockHeuristic(lines: string[], startLine: number): { start: number; end: number } {
   const len = lines.length;
   if (startLine < 1 || startLine > len) throw new Error(`Block start ${startLine} out of bounds (1..${len})`);
   const startIdx = startLine - 1;

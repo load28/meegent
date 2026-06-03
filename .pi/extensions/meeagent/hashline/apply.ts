@@ -45,8 +45,9 @@ function anchorOf(e: Edit): number {
   }
 }
 
-/** Apply hashline edits to file content. Line numbers refer to the ORIGINAL file. */
-export function applyEdits(content: string, edits: Edit[]): string {
+/** Apply hashline edits to file content. Line numbers refer to the ORIGINAL file.
+ * `path` (when given) lets block ops resolve via tree-sitter for that file's language. */
+export function applyEdits(content: string, edits: Edit[], path?: string): string {
   const original = toLines(content);
   const lines = original.slice();
   const len = original.length;
@@ -59,11 +60,11 @@ export function applyEdits(content: string, edits: Edit[]): string {
   // Resolve block ops to concrete ranges against the pristine original.
   const resolved: ResolvedEdit[] = edits.map((e): ResolvedEdit => {
     if (e.kind === "replace-block") {
-      const { start, end } = resolveBlock(original, e.at);
+      const { start, end } = resolveBlock(original, e.at, path);
       return { kind: "replace", start, end, lines: e.lines };
     }
     if (e.kind === "delete-block") {
-      const { start, end } = resolveBlock(original, e.at);
+      const { start, end } = resolveBlock(original, e.at, path);
       return { kind: "delete", start, end };
     }
     return e;
