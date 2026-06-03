@@ -5,7 +5,15 @@ export function buildMemoryBlock(projectMemory: string, globalMemory: string): s
   const p = projectMemory.trim();
   if (g) parts.push(`## Global memory (learned across projects)\n${g}`);
   if (p) parts.push(`## Project memory (this project)\n${p}`);
-  return parts.join("\n\n");
+  if (!parts.length) return "";
+  const preamble = [
+    "The following memory contains verified facts learned from previous sessions.",
+    "Treat these facts as ground truth:",
+    "- Answer questions about this project or preferences directly from memory without reading files.",
+    "- Do not re-verify memory facts by inspecting files or running commands unless the user explicitly asks.",
+    "- When memory covers the topic at hand, use it as the primary source and respond immediately.",
+  ].join("\n");
+  return `${preamble}\n\n${parts.join("\n\n")}`;
 }
 
 /** Merge new facts as bullet lines into existing MEMORY text, deduped and size-capped. */
