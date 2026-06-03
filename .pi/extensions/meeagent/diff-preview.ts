@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createTwoFilesPatch } from "diff";
+import { preparePatch } from "./hashline/patch.js";
+import { snapshots } from "./hashline/snapshots.js";
 
 export interface EditOp {
   oldText: string;
@@ -46,4 +49,24 @@ export async function buildWriteDiff(path: string, content: string, cwd: string)
   const abs = resolve(cwd, path.replace(/^@/, ""));
   const before = await readOrEmpty(abs);
   return stripPreamble(createTwoFilesPatch(path, path, before, content, "", "", { context: 3 }));
+}
+
+/**
+ * Unified diff for a `hashedit` tool call. Parses + validates (stale-tag) + applies the patch
+ * via the shared prepare step, then renders the before/after as a card. Returns the rejection
+ * reason instead when the patch is stale or malformed (so the caller can block with it).
+ */
+export function buildHasheditDiff(patchInput: string, cwd: string):
+  | { ok: true; diff: string }
+  | { ok: false; error: string } {
+  const res = preparePatch(
+    patchInput,
+    (p) => readFileSync(resolve(cwd, p.replace(/^@/, "")), "utf8"),
+    (p, tag) => snapshots.lookup(p, tag),
+  );
+  if (!res.ok) return { ok: false, error: res.error };
+  const diff = res.files
+    .map((f) => stripPreamble(createTwoFilesPatch(f.path, f.path, f.oldContent, f.newContent, "", "", { context: 3 })))
+    .join("\n");
+  return { ok: true, diff };
 }

@@ -48,6 +48,14 @@ pi            # 전역 pi가 위 설정으로 meeagent 확장을 로드
 - **플랜 모드**: 읽기 전용 탐색 → "Plan:" 마크다운 → Approve / Stay / Refine.
 - **diff 승인**(default 모드): 파일 수정 전 적·녹 diff 카드 → `a` 승인 / `r` 거절 / `c` 피드백.
 - **accept edits 모드**: diff 카드 없이 자동 적용.
+- **hashline 편집(`hashedit`)**: oh-my-pi식 해시 앵커 편집을 이식했다. `read`가 파일을
+  `¶path#TAG`(파일 전체 4-hex 해시) 헤더 + `LINE:TEXT` 번호 라인으로 보여주고, 모델은 라인을
+  다시 타이핑하지 않고 패치 DSL(`replace N..M:` / `insert before|after|head|tail:` / `delete N..M`,
+  본문 `+TEXT`)로 편집한다. `replace block N:` / `delete block N`은 **tree-sitter**(web-tree-sitter)로
+  블록 경계를 정밀 해석한다(미지원 언어는 브레이스/들여쓰기 폴백). 기본 `edit`를 대체하며(신규 파일은
+  `write`), `read` 이후 파일이 바뀌어 태그가 어긋나면 스냅샷 **3-way 병합으로 자동 복구**하고, 실패할
+  때만 거부한다. diff 승인·plan·accept edits에 그대로 편입된다. 설계·구현은 `docs/specs`·`docs/plans`의
+  hashline 문서 참고.
 - **LSP/의미 기반 코드 탐색 (Serena MCP)**: [Serena](https://github.com/oraios/serena)를
   pi-mcp-adapter로 붙여 심볼 단위 탐색(`find_symbol`, `get_symbols_overview`,
   `find_referencing_symbols` 등)을 제공한다. 좌표 대신 심볼 이름으로 코드를 탐색해

@@ -3,6 +3,7 @@ import { createModeState } from "./mode-state.js";
 import { setupPermissionMode } from "./permission-mode.js";
 import { setupPlanMode } from "./plan-mode.js";
 import { setupDiffApproval } from "./diff-approval.js";
+import { setupHashline } from "./hashline/setup-hashline.js";
 import { setupMemory } from "./memory/setup-memory.js";
 import { setupMcp } from "./mcp/setup-mcp.js";
 
@@ -11,6 +12,7 @@ export default function meeagent(pi: ExtensionAPI): void {
   setupPermissionMode(pi, state);
   setupPlanMode(pi, state);
   setupDiffApproval(pi, state);
+  setupHashline(pi);
   setupMcp(pi, state);
   setupMemory(pi);
 

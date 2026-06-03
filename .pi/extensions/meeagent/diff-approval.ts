@@ -1,7 +1,7 @@
 import { isToolCallEventType, Theme, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text, matchesKey, Key } from "@earendil-works/pi-tui";
 import type { ModeState } from "./mode-state.js";
-import { buildEditDiff, buildWriteDiff, type EditOp } from "./diff-preview.js";
+import { buildEditDiff, buildWriteDiff, buildHasheditDiff, type EditOp } from "./diff-preview.js";
 
 type Decision = "approve" | "reject" | "custom";
 
@@ -40,13 +40,19 @@ async function askDecision(ctx: ExtensionContext, diffText: string): Promise<Dec
 export function setupDiffApproval(pi: ExtensionAPI, state: ModeState): void {
   pi.on("tool_call", async (event, ctx) => {
     // Only gate file mutations.
-    if (event.toolName !== "edit" && event.toolName !== "write") return;
+    if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "hashedit") return;
     // acceptEdits: auto-approve. plan: already blocked by tool allow-list. Only gate `default`.
     if (state.current() !== "default") return;
     if (!ctx.hasUI) return; // non-interactive: let host policy decide
 
     let diffText: string;
-    if (isToolCallEventType("edit", event)) {
+    if (event.toolName === "hashedit") {
+      // hashedit is a custom tool: build the diff from its single `input` patch string.
+      // A stale/malformed patch is rejected here with the same reason the tool would return.
+      const built = buildHasheditDiff((event.input as { input: string }).input, ctx.cwd);
+      if (!built.ok) return { block: true, reason: built.error };
+      diffText = built.diff;
+    } else if (isToolCallEventType("edit", event)) {
       diffText = await buildEditDiff(event.input.path, event.input.edits as EditOp[], ctx.cwd);
     } else if (isToolCallEventType("write", event)) {
       diffText = await buildWriteDiff(event.input.path, event.input.content, ctx.cwd);
