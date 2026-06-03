@@ -35,6 +35,14 @@ describe("parsePatch", () => {
     ]);
   });
 
+  it("parses replace block and delete block ops", () => {
+    const out = parsePatch(wrap("¶a#0000\nreplace block 3:\n+  new body\ndelete block 10"));
+    expect(out.sections[0].edits).toEqual([
+      { kind: "replace-block", at: 3, lines: ["  new body"] },
+      { kind: "delete-block", at: 10 },
+    ]);
+  });
+
   it("errors on a -old / context body row", () => {
     expect(() => parsePatch(wrap("¶a#0000\nreplace 1..1:\n-old"))).toThrow(/body row|Unrecognized/i);
   });

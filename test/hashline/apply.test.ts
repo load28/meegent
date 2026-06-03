@@ -37,3 +37,37 @@ describe("applyEdits", () => {
     expect(() => applyEdits(c, [{ kind: "replace", start: 9, end: 9, lines: ["z"] }])).toThrow(/bound/i);
   });
 });
+
+describe("boundary auto-repair", () => {
+  const fn = "function f() {\n  const a = 1;\n  return a;\n}\n";
+
+  it("strips a trailing body line that echoes the line after the range (duplicated closer)", () => {
+    // Model replaces the body (lines 2..3) but mistakenly re-includes the closing brace (line 4).
+    const out = applyEdits(fn, [{ kind: "replace", start: 2, end: 3, lines: ["  return 42;", "}"] }]);
+    expect(out).toBe("function f() {\n  return 42;\n}\n");
+  });
+
+  it("strips a leading body line that echoes the line before the range", () => {
+    const out = applyEdits(fn, [{ kind: "replace", start: 2, end: 3, lines: ["function f() {", "  return 42;"] }]);
+    expect(out).toBe("function f() {\n  return 42;\n}\n");
+  });
+
+  it("leaves a body with no boundary echo untouched", () => {
+    const out = applyEdits(fn, [{ kind: "replace", start: 2, end: 2, lines: ["  const a = 2;"] }]);
+    expect(out).toBe("function f() {\n  const a = 2;\n  return a;\n}\n");
+  });
+});
+
+describe("block edits", () => {
+  const src = "function f() {\n  const a = 1;\n  return a;\n}\nconst x = 2;\n";
+
+  it("replace-block swaps the whole brace block at the anchor", () => {
+    const out = applyEdits(src, [{ kind: "replace-block", at: 1, lines: ["function f() { return 42; }"] }]);
+    expect(out).toBe("function f() { return 42; }\nconst x = 2;\n");
+  });
+
+  it("delete-block removes the whole block", () => {
+    const out = applyEdits(src, [{ kind: "delete-block", at: 1 }]);
+    expect(out).toBe("const x = 2;\n");
+  });
+});

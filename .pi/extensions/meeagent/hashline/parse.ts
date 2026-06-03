@@ -7,7 +7,9 @@ export type InsertPos =
 export type Edit =
   | { kind: "replace"; start: number; end: number; lines: string[] }
   | { kind: "insert"; pos: InsertPos; lines: string[] }
-  | { kind: "delete"; start: number; end: number };
+  | { kind: "delete"; start: number; end: number }
+  | { kind: "replace-block"; at: number; lines: string[] }
+  | { kind: "delete-block"; at: number };
 
 export interface ParsedSection { path: string; tag: string; edits: Edit[]; }
 export interface ParsedPatch { sections: ParsedSection[]; }
@@ -53,7 +55,14 @@ export function parsePatch(text: string): ParsedPatch {
     if (!cur) throw new Error(`Expected a ¶path#tag header before: ${line}`);
 
     let m: RegExpMatchArray | null;
-    if ((m = line.match(/^replace (.+):$/))) {
+    // Block ops are checked before the generic range ops ("block N" is not a range).
+    if ((m = line.match(/^replace block ([1-9]\d*):$/))) {
+      i++;
+      cur.edits.push({ kind: "replace-block", at: Number(m[1]), lines: collectBody() });
+    } else if ((m = line.match(/^delete block ([1-9]\d*)$/))) {
+      i++;
+      cur.edits.push({ kind: "delete-block", at: Number(m[1]) });
+    } else if ((m = line.match(/^replace (.+):$/))) {
       const { start, end } = parseRange(m[1]); i++;
       cur.edits.push({ kind: "replace", start, end, lines: collectBody() });
     } else if ((m = line.match(/^insert (before|after) ([1-9]\d*):$/))) {
