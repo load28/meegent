@@ -14,6 +14,11 @@ vitest로 단위 테스트한다. pi 훅·툴·커맨드 wiring(`setup-workflow`
 
 **Tech Stack:** Bun + TypeScript, `@earendil-works/pi-coding-agent`/`pi-ai`/`pi-tui` 0.78, vitest. 신규 런타임 의존성 없음.
 
+> **진행 상태(2026-06-03):** Task 0–10 구현 완료. 순수 모듈(state/docs/tiering/caching/reviewer/two-stage)
+> 32개 단위·통합 테스트 통과, 전체 132 테스트 + `tsc --noEmit` 그린. **남은 것: Task 10.2 라이브 스모크**
+> — `OPENROUTER_API_KEY`가 설정된 세션에서 Haiku 실행 + Sonnet 리뷰 + `Usage.cacheRead` 적중/비용 로그
+> 실측(설계 §6). 스파이크 결과는 `docs/superpowers/specs/2026-06-03-spike-notes.md`.
+
 ---
 
 ## File Structure
