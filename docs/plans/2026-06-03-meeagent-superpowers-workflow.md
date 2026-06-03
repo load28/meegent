@@ -29,6 +29,20 @@ vitest로 단위 테스트한다. pi 훅·툴·커맨드 wiring(`setup-workflow`
 > exec 모델 + 캐싱으로 라우팅(`memory/setup-memory.ts`). 전체 137 테스트 + 타입체크 그린.
 > 메인 실행 루프의 `cacheRetention` 주입은 `before_provider_request` payload가 불투명하므로 라이브
 > 스파이크 0.2 이후로 유지(프로바이더 기본값 "short").
+>
+> **하드닝 패스(2026-06-03, 에이전트 평가 반영):** 워크플로우 보증을 "프롬프트 신뢰"에서 "런타임 강제"로
+> 승격. (1) **HARD-GATE 툴 강제** — brainstorm/plan에서 `tool_call` 훅이 `hashedit`/`write`를 차단하고
+> `docs/superpowers/{specs,plans}/`만 허용, 파괴적 bash도 차단(`gate.ts:isDocPath`). 더 이상 저가
+> 모델이 설계 승인 전 코드를 쓸 수 없음. (2) **task 경계 리뷰** — 매 턴이 아니라 구현자가
+> `[[TASK-COMPLETE]]` 마커를 낸 턴에만 리뷰 발화(`gate.ts:isTaskComplete`/`lastAssistantText`,
+> `tdd.md` 지시 추가) → 미완성 diff 조기 리뷰 제거. (3) **재투입 루프 상한 + 에스컬레이션** —
+> `decideReviewOutcome`로 task당 `maxReviewRetries`(기본 3)회까지만 재투입, 초과 시 halt + 사람 개입
+> 안내(프리미엄 리뷰 비용 폭주 차단). `/workflow review`로 수동 재개. (4) **부분 플랜 재개** —
+> `/workflow build`가 `firstUndoneIndex`로 첫 미완료 task부터 시작(완료 task 재실행 버그 수정), 첫
+> execute 턴부터 `planTasks` 프리로드로 task 컨텍스트 주입. (5) `/workflow status`에 `retries/max`·
+> `BLOCKED` 표시, `config.maxReviewRetries` 설정 추가. **신규 순수 모듈 `workflow/gate.ts` +
+> 통합 시뮬레이션 테스트(`gate.test.ts`/`fix-loop.test.ts`) 포함 157 테스트 + 타입체크 그린.**
+> Task 10.2(라이브 캐시 스모크)는 여전히 `OPENROUTER_API_KEY` 세션에서만 실측 가능(미반영).
 
 ---
 

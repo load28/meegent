@@ -14,6 +14,7 @@ export interface WorkflowState {
   phase(): Phase;
   setPhase(p: Phase): void;
   taskIndex(): number;
+  setTaskIndex(n: number): void;
   nextTask(): number;
   reset(): void;
   onPhaseChange(listener: PhaseChangeListener): void;
@@ -35,6 +36,7 @@ export function createWorkflowState(initial: Phase = "idle"): WorkflowState {
     phase: () => phase,
     setPhase: (p) => change(p),
     taskIndex: () => taskIndex,
+    setTaskIndex: (n) => { taskIndex = Math.max(0, Math.floor(n)); },
     nextTask: () => ++taskIndex,
     reset: () => {
       taskIndex = 0;

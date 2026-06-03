@@ -44,6 +44,16 @@ export function parseTasks(md: string): PlanTask[] {
   return tasks;
 }
 
+/**
+ * Index of the first not-done task (resume point), or `tasks.length` when every
+ * task is already checked off. Lets `/workflow build` skip completed work instead
+ * of re-running task 0.
+ */
+export function firstUndoneIndex(tasks: PlanTask[]): number {
+  const i = tasks.findIndex((t) => !t.done);
+  return i === -1 ? tasks.length : i;
+}
+
 /** Mark the nth task (0-based, in document order) as done. No-op if already done or out of range. */
 export function markDone(md: string, index: number): string {
   let seen = -1;

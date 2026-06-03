@@ -26,6 +26,20 @@ describe("workflow-state", () => {
     expect(s.taskIndex()).toBe(2);
   });
 
+  it("setTaskIndex() seeks to a given task (for resuming a partial plan)", () => {
+    const s = createWorkflowState();
+    s.setTaskIndex(3);
+    expect(s.taskIndex()).toBe(3);
+    s.nextTask();
+    expect(s.taskIndex()).toBe(4);
+  });
+
+  it("setTaskIndex() clamps negatives to 0", () => {
+    const s = createWorkflowState();
+    s.setTaskIndex(-2);
+    expect(s.taskIndex()).toBe(0);
+  });
+
   it("reset() returns to idle at task 0", () => {
     const s = createWorkflowState();
     s.setPhase("execute");

@@ -3,6 +3,7 @@
   "workflow": {
     "execModel": "openrouter/anthropic/claude-haiku-4.5",
     "reviewModel": "openrouter/anthropic/claude-sonnet-4.6",
-    "cacheRetention": "short"
+    "cacheRetention": "short",
+    "maxReviewRetries": 3
   }
 }

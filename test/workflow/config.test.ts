@@ -11,6 +11,7 @@ describe("workflow config", () => {
       execModel: DEFAULT_EXEC_MODEL,
       reviewModel: DEFAULT_REVIEW_MODEL,
       cacheRetention: "short",
+      maxReviewRetries: 3,
     });
   });
 
@@ -20,13 +21,22 @@ describe("workflow config", () => {
         execModel: "openrouter/anthropic/claude-haiku-4.5",
         reviewModel: "openrouter/anthropic/claude-sonnet-4.6",
         cacheRetention: "long",
+        maxReviewRetries: 5,
       },
     });
     expect(cfg).toEqual({
       execModel: "openrouter/anthropic/claude-haiku-4.5",
       reviewModel: "openrouter/anthropic/claude-sonnet-4.6",
       cacheRetention: "long",
+      maxReviewRetries: 5,
     });
+  });
+
+  it("defaults and validates maxReviewRetries (non-negative number)", () => {
+    expect(parseWorkflowConfig({}).maxReviewRetries).toBe(3);
+    expect(parseWorkflowConfig({ workflow: { maxReviewRetries: 0 } }).maxReviewRetries).toBe(0);
+    expect(parseWorkflowConfig({ workflow: { maxReviewRetries: -1 } }).maxReviewRetries).toBe(3);
+    expect(parseWorkflowConfig({ workflow: { maxReviewRetries: "two" } }).maxReviewRetries).toBe(3);
   });
 
   it("ignores an invalid cacheRetention value", () => {

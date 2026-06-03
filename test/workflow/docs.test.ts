@@ -5,6 +5,7 @@ import {
   slug,
   parseTasks,
   markDone,
+  firstUndoneIndex,
 } from "../../.pi/extensions/meeagent/workflow/docs.js";
 
 describe("workflow-docs", () => {
@@ -46,5 +47,29 @@ describe("workflow-docs", () => {
   it("markDone() is a no-op when the task is already done", () => {
     const md = ["- [x] one", "- [ ] two"].join("\n");
     expect(markDone(md, 0)).toBe(md);
+  });
+
+  it("firstUndoneIndex() resumes at the first unchecked task", () => {
+    expect(
+      firstUndoneIndex([
+        { index: 0, title: "a", done: true },
+        { index: 1, title: "b", done: true },
+        { index: 2, title: "c", done: false },
+      ]),
+    ).toBe(2);
+  });
+
+  it("firstUndoneIndex() returns task count when every task is done", () => {
+    expect(
+      firstUndoneIndex([
+        { index: 0, title: "a", done: true },
+        { index: 1, title: "b", done: true },
+      ]),
+    ).toBe(2);
+  });
+
+  it("firstUndoneIndex() is 0 for an empty or all-undone plan", () => {
+    expect(firstUndoneIndex([])).toBe(0);
+    expect(firstUndoneIndex([{ index: 0, title: "a", done: false }])).toBe(0);
   });
 });
