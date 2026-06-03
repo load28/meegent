@@ -1,8 +1,11 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ModeState, PermissionMode } from "./mode-state.js";
 
-export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls"];
-export const FULL_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+// "mcp" is the pi-mcp-adapter proxy tool (Serena et al.). It stays available in
+// every mode — including plan — because mutating MCP calls are gated separately
+// by the mcp safety guard (see mcp/setup-mcp.ts), not by this allow-list.
+export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls", "mcp"];
+export const FULL_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls", "mcp"];
 
 /** Apply the tool allow-list and footer badge for a mode. */
 export function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: PermissionMode): void {

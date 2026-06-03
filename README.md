@@ -48,6 +48,30 @@ pi            # 전역 pi가 위 설정으로 meeagent 확장을 로드
 - **플랜 모드**: 읽기 전용 탐색 → "Plan:" 마크다운 → Approve / Stay / Refine.
 - **diff 승인**(default 모드): 파일 수정 전 적·녹 diff 카드 → `a` 승인 / `r` 거절 / `c` 피드백.
 - **accept edits 모드**: diff 카드 없이 자동 적용.
+- **LSP/의미 기반 코드 탐색 (Serena MCP)**: [Serena](https://github.com/oraios/serena)를
+  pi-mcp-adapter로 붙여 심볼 단위 탐색(`find_symbol`, `get_symbols_overview`,
+  `find_referencing_symbols` 등)을 제공한다. 좌표 대신 심볼 이름으로 코드를 탐색해
+  토큰을 아낀다. meeagent는 MCP 호출을 권한 모드에 편입한다(아래).
+
+## LSP/MCP (Serena) 연동
+pi는 MCP를 내장하지 않으므로(설계상), 범용 MCP 클라이언트 확장
+[`pi-mcp-adapter`](https://github.com/nicobailon/pi-mcp-adapter)로 Serena를 붙인다.
+
+1. 어댑터 설치(1회): `pi install npm:pi-mcp-adapter` 후 pi 재시작.
+2. Serena 런타임: `uv`(Python) 필요. 이 repo의 `.pi/mcp.json`이 `uvx`로 Serena를
+   lazy 기동하도록 설정돼 있다(첫 MCP 호출 시 연결).
+3. 사용: 모델은 단일 프록시 툴 `mcp`로 Serena 도구를 호출한다 —
+   `mcp({ search: "find_symbol" })` → `mcp({ tool: "serena_find_symbol", args: "{...}" })`.
+
+**안전 모델 편입** (`mcp/setup-mcp.ts`): `mcp` 프록시로 호출되는 Serena의 *편집/실행*
+도구(`replace_symbol_body`, `execute_shell_command` 등)는 MCP 서버 안에서 실행돼
+diff 승인·plan 차단을 우회한다. 그래서 meeagent는 `tool_call` 훅으로 이를 가로채:
+- **plan**: 변경/실행 도구 차단(검색·읽기 도구는 허용)
+- **default**: 변경 도구 호출 전 승인/거절/피드백 확인
+- **accept edits**: 자동 승인
+
+읽기/탐색 도구와 메타 op(search/describe/list)는 모든 모드에서 그대로 통과한다.
+어댑터가 없으면 `mcp` 툴이 없으니 이 배선은 무해하게 비활성된다.
 
 ## 테스트
 `bun run test`
