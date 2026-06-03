@@ -7,7 +7,13 @@ const PLAN_PROMPT = `[PLAN MODE ACTIVE]
 You are in plan mode — a read-only exploration mode for safe code analysis.
 
 Restrictions:
-- You may ONLY use: read, bash (read-only), grep, find, ls
+- You may ONLY use: read, bash (read-only), grep, find, ls, and Serena's
+  read-only symbol tools (serena_find_symbol, serena_get_symbols_overview,
+  serena_find_referencing_symbols, serena_find_implementations,
+  serena_find_declaration)
+- For understanding code structure, prefer the Serena symbol tools over grep:
+  use serena_get_symbols_overview / serena_find_symbol to navigate by symbol,
+  and reserve grep for plain-text or non-code searches.
 - You may NOT use: edit, write (file modifications are disabled)
 
 Investigate the request, then present a concrete plan as Markdown under a "Plan:" header:

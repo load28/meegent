@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ModeState } from "../mode-state.js";
 import { classifyMcpProxyCall } from "./mcp-safety.js";
+import { primeSerenaInstructions, serenaInstructions } from "./serena-instructions.js";
 
 // Name of the proxy tool registered by pi-mcp-adapter. All MCP server tools
 // (Serena's find_symbol, replace_symbol_body, ...) are reached through it.
@@ -28,6 +29,26 @@ function previewArgs(args: unknown): string {
  * adapter is absent the hook simply never fires.
  */
 export function setupMcp(pi: ExtensionAPI, state: ModeState): void {
+  // Surface Serena's instructions the way a standard MCP client (Claude Code) does:
+  // append them to the system prompt so the model relies on Serena's symbol tools
+  // instead of grep/read. pi-mcp-adapter drops the server's `instructions` field,
+  // so we fetch the same text from Serena directly (see serena-instructions.ts).
+  // Fetch runs at session start and is served from cache once ready — no turn blocks.
+  pi.on("session_start", async (_event, ctx) => {
+    await primeSerenaInstructions();
+    if (ctx.hasUI) {
+      // Visible confirmation that the guide is actually in the system prompt.
+      const ok = serenaInstructions() !== null;
+      ctx.ui.setStatus("meeagent-serena", ok ? ctx.ui.theme.fg("success", "serena-guide ✓") : undefined);
+    }
+  });
+
+  pi.on("before_agent_start", async (event) => {
+    const instructions = serenaInstructions();
+    if (!instructions) return; // not fetched yet (first run) — applies next session
+    return { systemPrompt: `${event.systemPrompt}\n\n${instructions}` };
+  });
+
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName !== MCP_PROXY_TOOL) return;
 

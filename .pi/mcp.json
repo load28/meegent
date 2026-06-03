@@ -12,7 +12,14 @@
         "--project",
         "."
       ],
-      "lifecycle": "lazy"
+      "lifecycle": "lazy",
+      "directTools": [
+        "find_symbol",
+        "get_symbols_overview",
+        "find_referencing_symbols",
+        "find_implementations",
+        "find_declaration"
+      ]
     }
   }
 }

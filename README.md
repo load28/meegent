@@ -42,6 +42,13 @@ cd <target>
 pi            # 전역 pi가 위 설정으로 meeagent 확장을 로드
 ```
 
+> **Serena(MCP)는 별도다.** `.pi/settings.json`은 확장(코드)만 가리킨다 — MCP 서버 설정은
+> 따라가지 않는다. 어댑터의 `.pi/mcp.json`은 cwd 기준 project-local이라 `meeagent/.pi/mcp.json`은
+> 다른 프로젝트에서 안 읽힌다. cross-project로 Serena를 쓰려면 **글로벌** `~/.pi/agent/mcp.json`에
+> serena 설정(아래 「LSP/MCP」와 동일, `directTools` 포함)을 둔다. `--project .`가 cwd를 타겟팅하므로
+> 어느 프로젝트에서 실행하든 그 프로젝트를 대상으로 동작한다(병합 우선순위상 project-local
+> `.pi/mcp.json`이 글로벌을 override하므로 meeagent repo 자신은 기존 설정을 그대로 쓴다).
+
 ## 기능
 - **Shift+Tab**: 권한 모드 순환 `default → ⏵⏵ accept edits → ⏸ plan`. pi가 shift+tab을
   `app.thinking.cycle`에 예약하고 keybindings는 글로벌 전용이라, 아래 글로벌 1파일이 필요하다.
@@ -75,8 +82,15 @@ pi는 MCP를 내장하지 않으므로(설계상), 범용 MCP 클라이언트 �
 1. 어댑터 설치(1회): `pi install npm:pi-mcp-adapter` 후 pi 재시작.
 2. Serena 런타임: `uv`(Python) 필요. 이 repo의 `.pi/mcp.json`이 `uvx`로 Serena를
    lazy 기동하도록 설정돼 있다(첫 MCP 호출 시 연결).
-3. 사용: 모델은 단일 프록시 툴 `mcp`로 Serena 도구를 호출한다 —
-   `mcp({ search: "find_symbol" })` → `mcp({ tool: "serena_find_symbol", args: "{...}" })`.
+   - **cross-project**: 다른 프로젝트에서도 Serena를 쓰려면 같은 serena 블록을 **글로벌**
+     `~/.pi/agent/mcp.json`에 둔다(project-local `.pi/mcp.json`은 cwd 밖에선 안 읽히므로).
+3. 사용: 읽기 전용 **탐색 툴은 `directTools`로 직접 노출**돼 `serena_*` 이름으로 툴 목록에 바로 뜬다
+   (`serena_find_symbol`, `serena_get_symbols_overview`, `serena_find_referencing_symbols`,
+   `serena_find_implementations`, `serena_find_declaration`). 모델이 grep 대신 심볼 탐색을 쓰게
+   하려는 의도다 — `permission-mode.ts`의 화이트리스트와 plan 프롬프트도 이 이름을 우대한다.
+   *수정/실행* 도구는 directTools에서 제외해 단일 프록시 툴 `mcp`로만 호출된다(아래 안전 모델).
+   `mcp({ search: "..." })` → `mcp({ tool: "serena_replace_symbol_body", args: "{...}" })`.
+   - directTools는 `mcp-cache.json`에서 등록된다. config 변경 후 안 보이면 `/mcp reconnect serena`.
 
 **안전 모델 편입** (`mcp/setup-mcp.ts`): `mcp` 프록시로 호출되는 Serena의 *편집/실행*
 도구(`replace_symbol_body`, `execute_shell_command` 등)는 MCP 서버 안에서 실행돼

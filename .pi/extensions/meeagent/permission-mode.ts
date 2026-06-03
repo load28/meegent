@@ -4,9 +4,22 @@ import type { ModeState, PermissionMode } from "./mode-state.js";
 // "mcp" is the pi-mcp-adapter proxy tool (Serena et al.). It stays available in
 // every mode — including plan — because mutating MCP calls are gated separately
 // by the mcp safety guard (see mcp/setup-mcp.ts), not by this allow-list.
-export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls", "mcp"];
+//
+// Serena's *read-only* navigation tools are also exposed directly (see
+// .pi/mcp.json `directTools`) so the model reaches for them instead of grep.
+// With the adapter's default toolPrefix "server", they register as `serena_*`.
+// Only read tools are listed here; mutating Serena tools stay proxy-only so the
+// mcp safety guard keeps gating them (plan-block / diff-approval).
+const SERENA_NAV_TOOLS = [
+  "serena_find_symbol",
+  "serena_get_symbols_overview",
+  "serena_find_referencing_symbols",
+  "serena_find_implementations",
+  "serena_find_declaration",
+];
+export const READONLY_TOOLS = ["read", "bash", "grep", "find", "ls", "mcp", ...SERENA_NAV_TOOLS];
 // `hashedit` (hashline) replaces the host `edit`; `write` stays for creating new files.
-export const FULL_TOOLS = ["read", "bash", "hashedit", "write", "grep", "find", "ls", "mcp"];
+export const FULL_TOOLS = ["read", "bash", "hashedit", "write", "grep", "find", "ls", "mcp", ...SERENA_NAV_TOOLS];
 
 /** Apply the tool allow-list and footer badge for a mode. */
 export function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: PermissionMode): void {
