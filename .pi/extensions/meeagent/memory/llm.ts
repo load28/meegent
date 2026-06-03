@@ -1,9 +1,21 @@
-import { complete } from "@earendil-works/pi-ai";
+import { complete, type Model, type Api } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-/** Run a single LLM completion with the session's model. Returns text, or "" if unavailable. */
-export async function runLLM(ctx: ExtensionContext, system: string, user: string): Promise<string> {
-  const model = ctx.model;
+/**
+ * Run a single LLM completion. Returns text, or "" if unavailable.
+ *
+ * `modelOverride` lets callers route a one-shot completion to a specific model
+ * (e.g. the workflow reviewer on a premium model) without changing the session
+ * model. When omitted, the session's `ctx.model` is used — existing memory
+ * distill/synthesize callers are unaffected.
+ */
+export async function runLLM(
+  ctx: ExtensionContext,
+  system: string,
+  user: string,
+  modelOverride?: Model<Api>,
+): Promise<string> {
+  const model = modelOverride ?? ctx.model;
   if (!model) return "";
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
   if (!auth.ok || !auth.apiKey) return "";
