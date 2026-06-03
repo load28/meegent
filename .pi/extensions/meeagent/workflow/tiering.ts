@@ -1,18 +1,30 @@
 /**
- * Model tiering for the workflow: cheap model (Haiku) executes code, premium
- * model (Sonnet) reviews. `parseModelRef` is pure and unit-tested; the resolve/
- * swap helpers touch the pi runtime and are typecheck-gated.
+ * Model tiering for the workflow — the section-8 orchestration topology:
  *
- * The execution loop stays on a single model so its prefix cache survives;
- * reviews run as separate completions (see reviewer.ts) rather than swapping the
- * session model on every task.
+ *   [orchestrator / Sonnet]  brainstorm · plan · final integration cross-review
+ *           │ delegates a narrow task spec
+ *           ▼
+ *   [implementer / Qwen3-Coder-Next]  implement + verify + refine loop, CLOSED
+ *           │ returns only a compressed signal (status/changed_files/summary/…)
+ *           └─ self-review (the ~59% verify/refine token cost) runs on THIS cheap
+ *              tier, not the premium model.
+ *
+ * The implementer is the planned local Qwen3-Coder-Next; until a local runtime
+ * exists we stand it in with the identical model on OpenRouter
+ * (`qwen/qwen3-coder-next`, which also prices cacheRead so caching survives).
+ *
+ * `parseModelRef` is pure and unit-tested; the resolve/swap helpers touch the pi
+ * runtime and are typecheck-gated. The build loop stays on a single model so its
+ * prefix cache survives; reviews run as separate completions (see reviewer.ts).
  */
 
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 /** Verified OpenRouter model refs (see docs/superpowers/specs/2026-06-03-spike-notes.md). */
-export const DEFAULT_EXEC_MODEL = "openrouter/anthropic/claude-haiku-4.5";
+// Implementer tier: stand-in for the planned local Qwen3-Coder-Next.
+export const DEFAULT_EXEC_MODEL = "openrouter/qwen/qwen3-coder-next";
+// Orchestrator tier: final integration / cross-file review.
 export const DEFAULT_REVIEW_MODEL = "openrouter/anthropic/claude-sonnet-4.6";
 
 export interface ModelRef {
