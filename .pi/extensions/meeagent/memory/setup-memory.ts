@@ -7,6 +7,8 @@ import { isDistillDue } from "./schedule.js";
 import { runLLM } from "./llm.js";
 import { distillProject } from "./distill.js";
 import { synthesizeGlobal } from "./synthesize.js";
+import { loadWorkflowConfig } from "../workflow/config.js";
+import { resolveModel } from "../workflow/tiering.js";
 import { readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
@@ -73,11 +75,14 @@ export function setupMemory(pi: ExtensionAPI): void {
         .map((d) => readMemory(join(projectsDir, d, "MEMORY.md")))
         .filter((m) => m.trim());
       const p = paths(root, ctx.cwd);
+      const cfg = loadWorkflowConfig(ctx.cwd);
+      const memModel = resolveModel(ctx, cfg.execModel);
       const res = await synthesizeGlobal({
         projectMemories: memories,
         currentGlobal: readMemory(p.globalMemory),
         maxChars: MEMORY_MAX_CHARS,
-        runLLM: (s, u) => runLLM(ctx, s, u),
+        // Background summarization runs on the cheap exec model with prompt caching.
+        runLLM: (s, u) => runLLM(ctx, s, u, { model: memModel, cacheRetention: cfg.cacheRetention }),
         writeGlobal: (c) => writeMemory(p.globalMemory, c),
       });
       if (ctx.hasUI) ctx.ui.notify(res.updated ? "Global memory updated." : "No project memory to synthesize.", "info");
@@ -95,12 +100,15 @@ async function runDistill(ctx: ExtensionContext, root: string): Promise<void> {
   const MAX_RAW = 40000;
   if (raw.length > MAX_RAW) raw = raw.slice(raw.length - MAX_RAW);
 
+  const cfg = loadWorkflowConfig(ctx.cwd);
+  const memModel = resolveModel(ctx, cfg.execModel);
   const result = await distillProject({
     rawLogs: raw,
     projectMemoryFile: p.projectMemory,
     globalMemoryFile: p.globalMemory,
     maxChars: MEMORY_MAX_CHARS,
-    runLLM: (s, u) => runLLM(ctx, s, u),
+    // Background summarization runs on the cheap exec model with prompt caching.
+    runLLM: (s, u) => runLLM(ctx, s, u, { model: memModel, cacheRetention: cfg.cacheRetention }),
     read: readMemory,
     write: writeMemory,
   });

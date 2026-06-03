@@ -26,28 +26,10 @@ import { join } from "node:path";
 import { createWorkflowState } from "./state.js";
 import { parseTasks, markDone, type PlanTask } from "./docs.js";
 import { loadSkill, type SkillName } from "./skills.js";
-import { resolveModel, swapTo, DEFAULT_EXEC_MODEL, DEFAULT_REVIEW_MODEL } from "./tiering.js";
+import { resolveModel, swapTo } from "./tiering.js";
 import { reviewTwoStage } from "./reviewer.js";
-
-interface WorkflowConfig {
-  execModel: string;
-  reviewModel: string;
-}
-
-function loadConfig(cwd: string): WorkflowConfig {
-  try {
-    const raw = JSON.parse(readFileSync(join(cwd, ".pi", "settings.json"), "utf8")) as {
-      workflow?: Partial<WorkflowConfig>;
-    };
-    const wf = raw.workflow ?? {};
-    return {
-      execModel: wf.execModel ?? DEFAULT_EXEC_MODEL,
-      reviewModel: wf.reviewModel ?? DEFAULT_REVIEW_MODEL,
-    };
-  } catch {
-    return { execModel: DEFAULT_EXEC_MODEL, reviewModel: DEFAULT_REVIEW_MODEL };
-  }
-}
+import { loadWorkflowConfig } from "./config.js";
+import { summarizeUsage, formatUsage } from "./caching.js";
 
 const PLANS_DIR = join("docs", "superpowers", "plans");
 
@@ -76,13 +58,14 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
   const wf = createWorkflowState();
   let planFile: string | undefined;
   let reviewing = false; // re-entrancy guard for the agent_end review
+  let reviewCostUSD = 0; // accumulated premium-review spend this session (instrumentation)
 
   function notify(ctx: ExtensionContext, msg: string, level: "info" | "warning" | "error" = "info"): void {
     if (ctx.hasUI) ctx.ui.notify(msg, level);
   }
 
   async function enterPhase(ctx: ExtensionContext, phase: "brainstorm" | "plan" | "execute"): Promise<void> {
-    const cfg = loadConfig(ctx.cwd);
+    const cfg = loadWorkflowConfig(ctx.cwd);
     wf.setPhase(phase);
     const ref = phase === "execute" ? cfg.execModel : cfg.reviewModel;
     const model = resolveModel(ctx, ref);
@@ -122,10 +105,11 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
           await runReview(ctx);
           break;
         case "status": {
-          const cfg = loadConfig(ctx.cwd);
+          const cfg = loadWorkflowConfig(ctx.cwd);
           notify(
             ctx,
-            `phase=${wf.phase()} task=${wf.taskIndex()} exec=${cfg.execModel} review=${cfg.reviewModel} plan=${planFile ?? "-"}`,
+            `phase=${wf.phase()} task=${wf.taskIndex()} exec=${cfg.execModel} review=${cfg.reviewModel} ` +
+              `cache=${cfg.cacheRetention} reviewCost=$${reviewCostUSD.toFixed(6)} plan=${planFile ?? "-"}`,
           );
           break;
         }
@@ -174,7 +158,7 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
   let planTasks: PlanTask[] | undefined;
 
   async function runReview(ctx: ExtensionContext): Promise<void> {
-    const cfg = loadConfig(ctx.cwd);
+    const cfg = loadWorkflowConfig(ctx.cwd);
     const reviewModel = resolveModel(ctx, cfg.reviewModel);
     if (!reviewModel) {
       notify(ctx, `리뷰 모델 resolve 실패: ${cfg.reviewModel}`, "warning");
@@ -199,11 +183,22 @@ export function setupWorkflow(pi: ExtensionAPI, mode: ModeState): void {
 
     reviewing = true;
     try {
-      const result = await reviewTwoStage(ctx, reviewModel, loadSkill("code-review"), {
-        taskSpec: task.title,
-        diff,
-        testOutput,
-      });
+      const result = await reviewTwoStage(
+        ctx,
+        reviewModel,
+        loadSkill("code-review"),
+        { taskSpec: task.title, diff, testOutput },
+        {
+          cacheRetention: cfg.cacheRetention,
+          // Both stages share this id so Stage 2 reuses Stage 1's cached prefix.
+          sessionId: `meeagent-review-task-${task.index}`,
+          onUsage: (u) => {
+            const s = summarizeUsage(u);
+            reviewCostUSD += s.costUSD;
+            notify(ctx, formatUsage(`리뷰 task ${task.index}`, s));
+          },
+        },
+      );
 
       if (result.pass) {
         const updated = markDone(planMd, task.index);

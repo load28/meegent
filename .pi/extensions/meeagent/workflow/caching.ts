@@ -39,3 +39,11 @@ export function cacheRetentionFor(longLived: boolean): CacheRetention {
 export function streamCacheOptions(retention: CacheRetention): { cacheRetention: CacheRetention } {
   return { cacheRetention: retention };
 }
+
+/** Render a usage summary as a one-line, log-friendly cost/cache report. */
+export function formatUsage(label: string, summary: UsageSummary): string {
+  return (
+    `${label}: $${summary.costUSD.toFixed(6)} · ` +
+    `cacheRead ${summary.cacheReadTokens} · cacheWrite ${summary.cacheWriteTokens}`
+  );
+}

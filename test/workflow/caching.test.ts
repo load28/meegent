@@ -3,6 +3,7 @@ import {
   summarizeUsage,
   cacheRetentionFor,
   streamCacheOptions,
+  formatUsage,
 } from "../../.pi/extensions/meeagent/workflow/caching.js";
 
 const usage = {
@@ -39,5 +40,11 @@ describe("workflow-caching", () => {
   it("streamCacheOptions wraps the retention preference", () => {
     expect(streamCacheOptions("short")).toEqual({ cacheRetention: "short" });
     expect(streamCacheOptions("long")).toEqual({ cacheRetention: "long" });
+  });
+
+  it("formatUsage renders a compact cost/cache line", () => {
+    expect(
+      formatUsage("리뷰", { cacheReadTokens: 800, cacheWriteTokens: 50, costUSD: 0.0021 }),
+    ).toBe("리뷰: $0.002100 · cacheRead 800 · cacheWrite 50");
   });
 });
